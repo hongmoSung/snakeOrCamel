@@ -30,10 +30,10 @@
     </extensions>
     <actions>
         <action
-                id="Name.Convert"
-                class="io.snakeorcamel.EditorAction"
-                text="Snake or Camel"
-                description="Change to snake case or camel case"
+            id="Name.Convert"
+            class="io.snakeorcamel.EditorAction"
+            text="Snake or Camel"
+            description="Change to snake case or camel case"
         >
             <add-to-group group-id="CodeFormatGroup" anchor="after" relative-to-action="ReformatCode"/>
             <add-to-group group-id="EditorPopupMenu" anchor="before" relative-to-action="ReformatCode"/>
