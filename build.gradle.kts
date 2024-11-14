@@ -1,23 +1,26 @@
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
+
 plugins {
     id("java")
     id("org.jetbrains.kotlin.jvm") version "1.9.21"
-    id("org.jetbrains.intellij") version "1.16.1"
+    id("org.jetbrains.intellij.platform") version "2.1.0"
 }
 
 group = "io.snakeOrCamel"
-version = "1.0.2"
+version = "1.0.4"
 
 repositories {
     mavenCentral()
+    intellijPlatform {
+        defaultRepositories()
+    }
 }
 
-// Configure Gradle IntelliJ Plugin
-// Read more: https://plugins.jetbrains.com/docs/intellij/tools-gradle-intellij-plugin.html
-intellij {
-    version.set("2023.1.5")
-    type.set("IC") // Target IDE Platform
-
-    plugins.set(listOf(/* Plugin Dependencies */))
+dependencies {
+    intellijPlatform {
+        create(IntelliJPlatformType.IntellijIdeaUltimate, "2024.3")
+        instrumentationTools()
+    }
 }
 
 tasks {
@@ -32,7 +35,7 @@ tasks {
 
     patchPluginXml {
         sinceBuild.set("231")
-        untilBuild.set("241.*")
+        untilBuild.set("243.*")
     }
 
     signPlugin {

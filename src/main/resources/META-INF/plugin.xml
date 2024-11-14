@@ -17,7 +17,7 @@
         <![CDATA[
             This plugin helps change text from camel case to snake case or from snake case to camel case.
 
-            You can use the selected text by clicking “Snake or Camel” in the menu or using the ⌃ + ⌘ + U shortcut keys.
+            You can use the selected text by clicking “Snake or Camel” in the menu or using the ⌃ + ⌘ + C shortcut keys.
         ]]>
     </description>
 
@@ -39,7 +39,7 @@
         >
             <add-to-group group-id="CodeFormatGroup" anchor="after" relative-to-action="ReformatCode"/>
             <add-to-group group-id="EditorPopupMenu" anchor="before" relative-to-action="ReformatCode"/>
-            <keyboard-shortcut keymap="$default" first-keystroke="control meta U"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="control meta C"/>
         </action>
     </actions>
 </idea-plugin>

@@ -7,9 +7,9 @@ import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.editor.Caret;
 import com.intellij.openapi.editor.CaretModel;
 import com.intellij.openapi.editor.Editor;
-import org.apache.commons.lang.StringUtils;
 
 import java.util.List;
+import java.util.Objects;
 
 public class EditorAction extends AnAction {
 
@@ -26,7 +26,7 @@ public class EditorAction extends AnAction {
         Runnable action = () -> {
             for (Caret caret : carets) {
                 String selectedText = caret.getSelectedText();
-                if (StringUtils.isBlank(selectedText)) {
+                if (Objects.requireNonNull(selectedText).isBlank()) {
                     continue;
                 }
                 String convertedText = selectedText.contains("_")
@@ -34,7 +34,6 @@ public class EditorAction extends AnAction {
                 editor.getDocument().replaceString(caret.getSelectionStart(), caret.getSelectionEnd(), convertedText);
             }
         };
-
 
         WriteCommandAction.runWriteCommandAction(e.getData(PlatformDataKeys.PROJECT), action);
     }}
