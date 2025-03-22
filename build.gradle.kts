@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "io.snakeOrCamel"
-version = "1.0.4"
+version = "1.0.5"
 
 repositories {
     mavenCentral()
@@ -26,11 +26,11 @@ dependencies {
 tasks {
     // Set the JVM compatibility versions
     withType<JavaCompile> {
-        sourceCompatibility = "17"
-        targetCompatibility = "17"
+        sourceCompatibility = "21"
+        targetCompatibility = "21"
     }
     withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
-        kotlinOptions.jvmTarget = "17"
+        kotlinOptions.jvmTarget = "21"
     }
 
     patchPluginXml {
