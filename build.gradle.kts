@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "io.snakeOrCamel"
-version = "1.0.5"
+version = "1.0.6"
 
 repositories {
     mavenCentral()
@@ -35,7 +35,7 @@ tasks {
 
     patchPluginXml {
         sinceBuild.set("231")
-        untilBuild.set("243.*")
+        untilBuild.set("251.*")
     }
 
     signPlugin {
