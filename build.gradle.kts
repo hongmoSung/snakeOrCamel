@@ -3,11 +3,11 @@ import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 plugins {
     id("java")
     id("org.jetbrains.kotlin.jvm") version "1.9.21"
-    id("org.jetbrains.intellij.platform") version "2.1.0"
+    id("org.jetbrains.intellij.platform") version "2.8.0"
 }
 
 group = "io.snakeOrCamel"
-version = "1.0.6"
+version = "1.0.7"
 
 repositories {
     mavenCentral()
@@ -19,7 +19,6 @@ repositories {
 dependencies {
     intellijPlatform {
         create(IntelliJPlatformType.IntellijIdeaUltimate, "2024.3")
-        instrumentationTools()
     }
 }
 
@@ -34,8 +33,7 @@ tasks {
     }
 
     patchPluginXml {
-        sinceBuild.set("231")
-        untilBuild.set("251.*")
+        sinceBuild.set("241")
     }
 
     signPlugin {
