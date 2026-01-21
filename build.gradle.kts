@@ -2,12 +2,11 @@ import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 
 plugins {
     id("java")
-    id("org.jetbrains.kotlin.jvm") version "1.9.21"
-    id("org.jetbrains.intellij.platform") version "2.8.0"
+    id("org.jetbrains.intellij.platform") version "2.10.5"
 }
 
 group = "io.snakeOrCamel"
-version = "1.0.7"
+version = "1.1.0"
 
 repositories {
     mavenCentral()
@@ -18,18 +17,23 @@ repositories {
 
 dependencies {
     intellijPlatform {
-        create(IntelliJPlatformType.IntellijIdeaUltimate, "2024.3")
+        create(IntelliJPlatformType.IntellijIdeaUltimate, "2024.1")
+        pluginVerifier()
+    }
+}
+
+intellijPlatform {
+    pluginVerification {
+        ides {
+            recommended()
+        }
     }
 }
 
 tasks {
-    // Set the JVM compatibility versions
     withType<JavaCompile> {
-        sourceCompatibility = "21"
-        targetCompatibility = "21"
-    }
-    withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
-        kotlinOptions.jvmTarget = "21"
+        sourceCompatibility = "17"
+        targetCompatibility = "17"
     }
 
     patchPluginXml {
