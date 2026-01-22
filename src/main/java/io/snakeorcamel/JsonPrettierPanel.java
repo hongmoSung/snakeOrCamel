@@ -227,9 +227,7 @@ public class JsonPrettierPanel extends JPanel {
         try {
             String formatted = JsonUtil.prettify(input);
 
-            WriteCommandAction.runWriteCommandAction(project, () -> {
-                editor.getDocument().setText(formatted);
-            });
+            WriteCommandAction.runWriteCommandAction(project, () -> editor.getDocument().setText(formatted));
 
             if (editor instanceof EditorEx editorEx) {
                 editorEx.getMarkupModel().removeAllHighlighters();

@@ -23,19 +23,6 @@ public class JsonUtil {
         }
     }
 
-    public static boolean isValidJson(String json) {
-        if (json == null || json.trim().isEmpty()) {
-            return false;
-        }
-
-        try {
-            JsonParser.parseString(json);
-            return true;
-        } catch (JsonSyntaxException e) {
-            return false;
-        }
-    }
-
     public static int getArrayCount(String json) {
         if (json == null || json.trim().isEmpty()) {
             return -1;
