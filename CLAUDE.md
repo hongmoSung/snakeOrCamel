@@ -4,7 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-snakeOrCamel is a JetBrains IntelliJ Platform plugin that converts text between snake_case and camelCase. It works with all IntelliJ-based IDEs (IntelliJ IDEA, WebStorm, PyCharm, PhpStorm, Rider, etc.).
+snakeOrCamel is a JetBrains IntelliJ Platform plugin that provides text conversion utilities. It works with all IntelliJ-based IDEs (IntelliJ IDEA, WebStorm, PyCharm, PhpStorm, Rider, etc.).
+
+**Features:**
+- Convert text between snake_case/kebab-case and camelCase
+- JSON Prettier tool window for formatting JSON
 
 ## Build Commands
 
@@ -24,25 +28,25 @@ snakeOrCamel is a JetBrains IntelliJ Platform plugin that converts text between 
 
 ## Architecture
 
-The plugin consists of two Java classes in `src/main/java/io/snakeorcamel/`:
+Java classes in `src/main/java/io/snakeorcamel/`:
 
-- **ConvertUtil.java** - Static utility methods for case conversion:
-  - `toCamelCase(String)` - Converts snake_case/kebab-case to camelCase
-  - `toSnakeCase(String)` - Converts camelCase to snake_case
+**Case Conversion (Editor Action):**
+- **ConvertUtil.java** - Static utility methods: `toCamelCase(String)` (handles both snake_case and kebab-case) and `toSnakeCase(String)`
+- **EditorAction.java** - IntelliJ `AnAction` that handles multi-caret text selection, auto-detects case format (presence of underscore → convert to camelCase, otherwise → convert to snake_case), and performs undoable replacement via `WriteCommandAction`
 
-- **EditorAction.java** - IntelliJ `AnAction` implementation that:
-  - Handles editor text selection events
-  - Supports multi-caret/multi-selection
-  - Auto-detects case format (checks for underscore presence)
-  - Uses `WriteCommandAction` for undoable text replacement
+**JSON Prettier (Tool Window):**
+- **JsonUtil.java** - JSON formatting using Gson: `prettify(String)`, `isValidJson(String)`, and `getArrayCount(String)`
+- **JsonPrettierToolWindowFactory.java** - `ToolWindowFactory` that creates the JSON Prettier panel
+- **JsonPrettierPanel.java** - Swing UI with input/output text areas and format/copy/clear buttons
 
-Plugin configuration is in `src/main/resources/META-INF/plugin.xml`:
-- Action ID: `Name.Convert`
-- Keyboard shortcut: `Ctrl+Cmd+C` (macOS)
-- Available in Code Format menu and Editor popup menu
+Plugin configuration: `src/main/resources/META-INF/plugin.xml`
+- Case conversion: Action ID `Name.Convert`, keyboard shortcut `Ctrl+Meta+C` (`⌃⌘C` on macOS)
+- JSON Prettier: Tool window ID "JSON Prettier", anchored to right sidebar
+- Dependencies: `com.intellij.modules.platform`, `com.intellij.modules.json`
 
 ## Tech Stack
 
 - Java 17
 - Gradle 9.3.0 with IntelliJ Platform Gradle Plugin 2.10.5
-- Target IDE: IntelliJ IDEA 2024.1+ (sinceBuild 241, no upper limit)
+- Target IDE: IntelliJ IDEA 2024.1+ (sinceBuild 241)
+- Gson for JSON processing

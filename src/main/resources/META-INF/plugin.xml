@@ -15,20 +15,51 @@
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/plugin-overview-page.html#plugin-description -->
     <description>
         <![CDATA[
-            This plugin helps change text from camel case to snake case or from snake case to camel case.
+<b>Case Converter & JSON Prettier</b> - Convert text between naming conventions and format JSON instantly.
 
-            You can use the selected text by clicking “Snake or Camel” in the menu or using the ⌃ + ⌘ + C shortcut keys.
+<h3>Case Conversion</h3>
+<ul>
+    <li><b>snake_case to camelCase</b>: my_variable_name → myVariableName</li>
+    <li><b>camelCase to snake_case</b>: myVariableName → my_variable_name</li>
+    <li><b>kebab-case to camelCase</b>: my-variable-name → myVariableName</li>
+</ul>
+
+<h3>JSON Prettier</h3>
+<ul>
+    <li>Format and beautify JSON in the tool window</li>
+    <li>Validate JSON syntax</li>
+    <li>Copy formatted output with one click</li>
+</ul>
+
+<h3>Usage</h3>
+<ul>
+    <li><b>Case Convert</b>: Select text → Right-click "Snake or Camel" or press <code>Ctrl+Cmd+C</code> (macOS) / <code>Ctrl+Alt+C</code> (Windows/Linux)</li>
+    <li><b>JSON Prettier</b>: Open from the right tool window sidebar</li>
+</ul>
+
+<h3>Use Cases</h3>
+<ul>
+    <li>Convert between Java/JavaScript camelCase and Python snake_case</li>
+    <li>Transform SQL column names to programming variables</li>
+    <li>Format minified JSON for readability</li>
+</ul>
         ]]>
     </description>
 
     <!-- Product and plugin compatibility requirements.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html -->
     <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.json</depends>
 
     <!-- Extension points defined by the plugin.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
     <extensions defaultExtensionNs="com.intellij">
-
+        <toolWindow
+            id="JSON Prettier"
+            anchor="right"
+            icon="/icons/jsonPrettier.svg"
+            factoryClass="io.snakeorcamel.JsonPrettierToolWindowFactory"
+        />
     </extensions>
     <actions>
         <action
