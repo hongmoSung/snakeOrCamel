@@ -38,6 +38,12 @@ tasks {
 
     patchPluginXml {
         sinceBuild.set("241")
+        changeNotes.set("""
+            <h2>1.1.0</h2>
+            <ul>
+                <li>Added JSON Prettier tool window for formatting JSON</li>
+            </ul>
+        """.trimIndent())
     }
 
     signPlugin {
