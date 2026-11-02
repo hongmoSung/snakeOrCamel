@@ -6,6 +6,7 @@ import com.intellij.openapi.options.SearchableConfigurable;
 import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
+import com.intellij.ui.components.JBLabel;
 import java.util.ArrayList;
 import java.util.List;
 import org.jetbrains.annotations.NotNull;
@@ -37,12 +38,16 @@ public final class AgentConfigurable implements SearchableConfigurable {
                 {"Claude Code", "com.anthropic.code.plugin"}, {"Codex CLI", "com.github.codexjb"}}) {
             top.add(new JLabel(plugin[0] + ": " + pluginStatus(plugin[1])));
         }
-        JTextArea status = new JTextArea(AgentKeymap.getInstance().status());
-        status.setEditable(false); status.setLineWrap(true); status.setWrapStyleWord(true); status.setOpaque(false);
+        JBLabel status = new JBLabel(AgentKeymap.getInstance().status()).setAllowAutoWrapping(true).setCopyable(true);
         top.add(status);
         JButton keymap = new JButton("Open Keymap Settings…");
         keymap.addActionListener(e -> com.intellij.openapi.options.ShowSettingsUtil.getInstance().showSettingsDialog(null, "Keymap"));
         top.add(keymap);
+        // BoxLayout combines each child's cross-axis alignment. A centered status component otherwise
+        // pushes the left-aligned labels and checkbox towards the middle of a wide settings page.
+        for (Component component : top.getComponents()) {
+            if (component instanceof JComponent child) child.setAlignmentX(Component.LEFT_ALIGNMENT);
+        }
         panel.add(top, BorderLayout.NORTH);
         panel.add(profilePanel(), BorderLayout.CENTER);
         reset(); return panel;
