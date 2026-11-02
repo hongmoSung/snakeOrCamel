@@ -78,6 +78,43 @@ public class AgentPlatformTest extends BasePlatformTestCase {
         sessions.run(profile);
         assertEquals(1,terminal.created); assertEquals(1,terminal.first.executions);
     }
+    public void testExistingEmptyShellLaunchesDefaultAfterBackgroundProbe() throws Exception {
+        var terminal = setupTerminal(); openDiskFile("reference");
+        terminal.first.shell = true; terminal.first.ready = false;
+        var profile = new AgentProfile("Codex",AgentProfile.Kind.Codex,"codex");
+        var profiles = AgentProfiles.getInstance(getProject()).getState();
+        profiles.profiles = new ArrayList<>(List.of(profile)); profiles.defaultId = profile.id;
+
+        getProject().getService(AgentSessions.class).insert(myFixture.getEditor());
+
+        PlatformTestUtil.waitWithEventsDispatching("default launched in existing shell",() -> terminal.first.executions == 1,5);
+        assertEquals(0,terminal.created);
+        assertTrue(terminal.first.probes.get() > 0);
+        terminal.first.ready = true;
+        PlatformTestUtil.waitWithEventsDispatching("reference inserted after readiness",() -> !terminal.first.input.isEmpty(),5);
+        assertEquals(1,terminal.first.executions);
+    }
+    public void testDisablingDuringAProcessProbeDiscardsLateResultsAfterReenable() throws Exception {
+        var terminal = setupTerminal(); openDiskFile("reference");
+        var blocked = new java.util.concurrent.CountDownLatch(1);
+        terminal.first.blockedProbe = blocked;
+        var sessions = getProject().getService(AgentSessions.class);
+        try {
+            sessions.insert(myFixture.getEditor());
+            PlatformTestUtil.waitWithEventsDispatching("probe started without blocking EDT",() -> terminal.first.probes.get() > 0,5);
+            assertTrue(terminal.first.input.isEmpty());
+            AgentSettings.getInstance().getState().enabled = false;
+            AgentKeymap.getInstance().reconcile();
+            terminal.first.blockedProbe = null;
+            AgentSettings.getInstance().getState().enabled = true;
+            sessions.insert(myFixture.getEditor());
+            blocked.countDown();
+            PlatformTestUtil.waitWithEventsDispatching("only the new request inserts",() -> !terminal.first.input.isEmpty(),5);
+            assertEquals(1,terminal.first.input.size());
+            assertTrue(terminal.first.probes.get() >= 2);
+            assertEquals(0,terminal.first.executions);
+        } finally { blocked.countDown(); }
+    }
     public void testConflictingShortcutIsPreservedAndAutomaticBindingIsRemovedOnDisable() {
         var keymap = com.intellij.openapi.keymap.KeymapManager.getInstance().getActiveKeymap();
         var shortcut = AgentKeymap.shortcut();
@@ -127,9 +164,23 @@ public class AgentPlatformTest extends BasePlatformTestCase {
     }
     private static final class FakeSession implements TerminalAccess.Session {
         final List<String> input = new ArrayList<>(); final Object connection=new Object();
+        final java.util.concurrent.atomic.AtomicInteger probes = new java.util.concurrent.atomic.AtomicInteger();
+        volatile java.util.concurrent.CountDownLatch blockedProbe;
         boolean ready=true, shell; int executions;
         @Override public Object identity() { return this; }
+        @Override public void refreshProcessState() {
+            var application = com.intellij.openapi.application.ApplicationManager.getApplication();
+            assertFalse(application.isDispatchThread());
+            assertFalse(application.isReadAccessAllowed());
+            var blocked = blockedProbe;
+            probes.incrementAndGet();
+            if (blocked != null) {
+                try { assertTrue(blocked.await(5,java.util.concurrent.TimeUnit.SECONDS)); }
+                catch (InterruptedException ex) { Thread.currentThread().interrupt(); throw new IllegalStateException(ex); }
+            }
+        }
         @Override public TerminalAccess.Screen screen() {
+            com.intellij.openapi.application.ApplicationManager.getApplication().assertIsDispatchThread();
             return new TerminalAccess.Screen(ready ? "OpenAI Codex\n› existing question\nGPT-6.1-Sol high · /tmp" : "starting",ready ? "› existing question" : "",ready ? "› existing question" : "",2,true,shell,!shell,connection);
         }
         @Override public Path directory() { return null; }

@@ -19,21 +19,25 @@ public final class AgentSessions implements Disposable {
     private final PendingRequests<Request> queue = new PendingRequests<>(System::nanoTime, TimeUnit.SECONDS.toNanos(30));
     private final Map<String, TerminalAccess.Session> profileTabs = new HashMap<>();
     private final Map<Object, AgentProfile> launchedProfiles = new IdentityHashMap<>();
-    private boolean disposed;
+    private volatile boolean disposed;
+    private volatile long generation;
     private boolean pollScheduled;
     private static final class Request {
         final TerminalAccess.Session session;
-        final AgentProfile profile;
+        AgentProfile profile;
         final EditorReference reference;
         final Runnable retry;
         final boolean firstOnly;
+        final boolean created;
+        boolean initialized;
         boolean allowLaunch;
         Object connection;
         AutoCloseable watch;
         Notification notice;
-        Request(TerminalAccess.Session session, AgentProfile profile, EditorReference reference, Runnable retry, boolean firstOnly, boolean allowLaunch) {
+        Request(TerminalAccess.Session session, AgentProfile profile, EditorReference reference, Runnable retry, boolean firstOnly, boolean allowLaunch, boolean created) {
             this.session = session; this.profile = profile; this.reference = reference; this.retry = retry;
             this.firstOnly = firstOnly; this.allowLaunch = allowLaunch;
+            this.created = created;
         }
     }
     public AgentSessions(Project project) {
@@ -56,10 +60,7 @@ public final class AgentSessions implements Disposable {
             if (created) { session = terminal().create(directory(profile), profile.name); profileTabs.put(profile.id,session); }
             session.focus();
             if (hasRequest(session)) return;
-            if (!created && !session.screen().emptyShell()) {
-                AgentNotifications.show(project,"The profile tab is already in use. Its process and input were preserved.",null,null); return;
-            }
-            offer(new Request(session,profile.copy(),null,() -> run(profile),false,true));
+            offer(new Request(session,profile.copy(),null,() -> run(profile),false,true,created));
         } catch (RuntimeException | LinkageError ex) { report(ex,null,() -> run(profile)); }
     }
     public void insert(Editor editor) {
@@ -72,18 +73,16 @@ public final class AgentSessions implements Disposable {
             var session = terminal.first();
             AgentProfile profile = session == null ? null : launchedProfiles.get(session.identity());
             boolean created = session == null;
-            if (created || session.screen().emptyShell()) {
+            if (created) {
                 if (profile == null) profile = AgentProfiles.getInstance(project).defaultProfile();
                 if (profile == null) profile = chooseDefault();
                 if (profile == null) { reference.close(); return; }
                 profile.validate();
-                if (created) {
-                    session = terminal.create(directory(profile), profile.name);
-                    profileTabs.put(profile.id,session);
-                }
+                session = terminal.create(directory(profile), profile.name);
+                profileTabs.put(profile.id,session);
             }
             Request request = new Request(session,profile == null ? null : profile.copy(),reference,retry,true,
-                    (created || session.screen().emptyShell()) && !hasRequest(session));
+                    !hasRequest(session),created);
             offer(request);
         } catch (RuntimeException | LinkageError ex) {
             report(ex, reference,retry); if (reference != null) reference.close();
@@ -123,16 +122,29 @@ public final class AgentSessions implements Disposable {
     private void schedule() {
         if (pollScheduled || queue.isEmpty() || !enabled()) return;
         pollScheduled = true;
-        alarm.addRequest(() -> ApplicationManager.getApplication().invokeLater(this::poll, ModalityState.nonModal()), 200);
+        long epoch = generation;
+        var sampled = queue.entries();
+        alarm.addRequest(() -> {
+            Map<Request,String> failures = new IdentityHashMap<>();
+            for (var entry : sampled) {
+                if (epoch != generation || !enabled()) return;
+                try { entry.value().session.refreshProcessState(); }
+                catch (RuntimeException | LinkageError ex) { failures.put(entry.value(),ex.getMessage()); }
+            }
+            ApplicationManager.getApplication().invokeLater(() -> {
+                if (epoch == generation) poll(sampled,failures,epoch);
+            }, ModalityState.nonModal());
+        }, 200);
     }
-    private void poll() {
-        pollScheduled = false;
+    private void poll(List<PendingRequests.Entry<Request>> sampled, Map<Request,String> failures, long epoch) {
         if (!enabled()) { cancelAll(); return; }
-        // Mutable terminal models must be read on EDT. Recognition runs on immutable snapshots off EDT.
+        // Blocking probes have completed off EDT. UI capture and background recognition remain separate.
         var observations = new ArrayList<Observation>();
-        for (var entry : queue.entries()) {
+        for (var entry : sampled) {
             Request request = entry.value();
+            if (!queue.contains(request)) continue;
             try {
+                if (failures.containsKey(request)) { stop(request,failures.get(request)); continue; }
                 if (queue.expired(entry)) { stop(request,"No ready input was detected within 30 seconds. Automatic insertion stopped."); continue; }
                 if (!valid(request)) { stop(request,"The target tab or session changed. Retry to use the current first tab."); continue; }
                 TerminalAccess.Screen screen = request.session.screen();
@@ -146,9 +158,10 @@ public final class AgentSessions implements Disposable {
         ApplicationManager.getApplication().executeOnPooledThread(() -> {
             List<Decision> decisions = observations.stream().map(o -> new Decision(o.request,detector.detect(o.screen,o.request.profile))).toList();
             ApplicationManager.getApplication().invokeLater(() -> {
+                if (epoch != generation) return;
                 if (!enabled()) { cancelAll(); return; }
                 for (Decision decision : decisions) handle(decision.request,decision.result);
-                schedule();
+                if (epoch == generation) { pollScheduled = false; schedule(); }
             },ModalityState.nonModal());
         });
     }
@@ -169,7 +182,28 @@ public final class AgentSessions implements Disposable {
             }
             ReadyDetector.Result current = detector.detect(fresh,request.profile);
             if (!current.equals(result)) return;
+            if (!request.initialized) {
+                request.initialized = true;
+                if (!request.created && current.state() != ReadyDetector.State.EMPTY_SHELL) {
+                    request.allowLaunch = false;
+                    if (request.reference == null) {
+                        finish(request);
+                        AgentNotifications.show(project,"The profile tab is already in use. Its process and input were preserved.",null,null);
+                        return;
+                    }
+                }
+            }
             if (current.state() == ReadyDetector.State.EMPTY_SHELL && request.allowLaunch) {
+                if (request.profile == null) {
+                    request.profile = AgentProfiles.getInstance(project).defaultProfile();
+                    if (request.profile == null) {
+                        request.profile = chooseDefault();
+                        if (request.profile == null) finish(request);
+                        // A modal selection can take time: re-probe before executing on the next cycle.
+                        return;
+                    }
+                }
+                request.profile.validate();
                 // A single request launches at most once, even if the command exits immediately.
                 request.allowLaunch = false;
                 launchedProfiles.put(request.session.identity(),request.profile.copy());
@@ -192,16 +226,27 @@ public final class AgentSessions implements Disposable {
     }
     private void manual(Request request) {
         try {
-        if (!queue.contains(request) || !valid(request)) return;
-        if (expired(request)) { stop(request,"The reference expired. Retry to create a new request."); return; }
-        var result = detector.detect(request.session.screen(),request.profile);
-        if (result.state() == ReadyDetector.State.CONFIRMATION || result.state() == ReadyDetector.State.EMPTY_SHELL) return;
-        if (Messages.showYesNoDialog(project,"Check that the first terminal tab is at your Custom agent's question input. Insert without Enter?",
-                "Insert Reference",null) != Messages.YES) return;
-        if (!queue.contains(request) || !valid(request) || expired(request)) return;
-        result = detector.detect(request.session.screen(),request.profile);
-        if (result.state() != ReadyDetector.State.CONFIRMATION && result.state() != ReadyDetector.State.EMPTY_SHELL
-                && request.session.screen().connected()) send(request,AgentProfile.Kind.Custom,true);
+            if (!queue.contains(request) || !valid(request)) return;
+            if (expired(request)) { stop(request,"The reference expired. Retry to create a new request."); return; }
+            var result = detector.detect(request.session.screen(),request.profile);
+            if (result.state() == ReadyDetector.State.CONFIRMATION || result.state() == ReadyDetector.State.EMPTY_SHELL) return;
+            if (Messages.showYesNoDialog(project,"Check that the first terminal tab is at your Custom agent's question input. Insert without Enter?",
+                    "Insert Reference",null) != Messages.YES) return;
+            long epoch = generation;
+            ApplicationManager.getApplication().executeOnPooledThread(() -> {
+                if (epoch != generation || !enabled()) return;
+                String failure = null;
+                try { request.session.refreshProcessState(); }
+                catch (RuntimeException | LinkageError ex) { failure = ex.getMessage() == null ? "Terminal process state is unknown." : ex.getMessage(); }
+                String error = failure;
+                ApplicationManager.getApplication().invokeLater(() -> {
+                    if (epoch != generation || !queue.contains(request)) return;
+                    try {
+                        if (error != null) { stop(request,error); return; }
+                        if (valid(request) && !expired(request)) send(request,AgentProfile.Kind.Custom,true);
+                    } catch (RuntimeException | LinkageError ex) { stop(request,ex.getMessage()); }
+                },ModalityState.nonModal());
+            });
         } catch (RuntimeException | LinkageError ex) { stop(request,ex.getMessage()); }
     }
     private boolean expired(Request request) {
@@ -248,6 +293,7 @@ public final class AgentSessions implements Disposable {
         if (request.watch != null) try { request.watch.close(); } catch (Exception ignored) { }
     }
     public void cancelAll() {
+        generation++;
         alarm.cancelAllRequests(); pollScheduled = false;
         for (var entry : queue.entries()) finish(entry.value());
     }

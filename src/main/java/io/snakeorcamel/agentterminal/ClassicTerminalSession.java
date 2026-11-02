@@ -1,21 +1,44 @@
 package io.snakeorcamel.agentterminal;
 
 import com.intellij.ui.content.Content;
+import com.intellij.openapi.application.ApplicationManager;
+import com.jediterm.terminal.TtyConnector;
 import org.jetbrains.plugins.terminal.ShellTerminalWidget;
 import java.nio.file.Path;
 import java.util.function.BooleanSupplier;
+import java.util.concurrent.TimeUnit;
 
 final class ClassicTerminalSession implements TerminalAccess.Session {
     private final ShellTerminalWidget widget;
     private final Content content;
     private final BooleanSupplier exists;
     private final Runnable focus;
+    private record ProcessState(TtyConnector connector, boolean running, long sampledAt) {}
+    private volatile ProcessState processState;
     ClassicTerminalSession(ShellTerminalWidget widget, Content content, BooleanSupplier exists, Runnable focus) {
         this.widget = widget; this.content = content; this.exists = exists; this.focus = focus;
     }
     @Override public Object identity() { return widget; }
     @Override public boolean exists() { return content.getManager() != null && exists.getAsBoolean(); }
+    @Override public void refreshProcessState() {
+        var application = ApplicationManager.getApplication();
+        if (application.isDispatchThread() || application.isReadAccessAllowed()) {
+            throw new IllegalStateException("Terminal process probes require a background thread without a read action.");
+        }
+        var connector = widget.getTtyConnector();
+        processState = null;
+        if (connector == null || !connector.isConnected()) return;
+        try {
+            boolean running = widget.hasRunningCommands();
+            if (widget.getTtyConnector() == connector && connector.isConnected()) {
+                processState = new ProcessState(connector,running,System.nanoTime());
+            }
+        } catch (IllegalStateException ignored) {
+            // Unsupported connectors have unknown state, never a confirmed empty shell.
+        }
+    }
     @Override public TerminalAccess.Screen screen() {
+        ApplicationManager.getApplication().assertIsDispatchThread();
         var connector = widget.getTtyConnector();
         if (connector == null || !connector.isConnected()) return TerminalAccess.Screen.unknown();
         var buffer = widget.getTerminalTextBuffer();
@@ -25,9 +48,12 @@ final class ClassicTerminalSession implements TerminalAccess.Session {
             int row = Math.max(0, Math.min(buffer.getHeight()-1, terminal.getCursorY()-1));
             String line = buffer.getLine(row).getText();
             int column = Math.max(0, Math.min(line.length(), terminal.getCursorX()-1));
-            // Require a recognizable shell prompt AND the platform's process/typed-input checks.
-            boolean running = widget.hasRunningCommands();
-            boolean idle = !running && !buffer.isUsingAlternateBuffer() && line.stripTrailing().matches(".*[$%#❯>] ?")
+            // Process queries may block and are forbidden on EDT in newer Classic terminals.
+            ProcessState state = processState;
+            boolean known = state != null && state.connector == connector
+                    && System.nanoTime()-state.sampledAt <= TimeUnit.SECONDS.toNanos(1);
+            boolean running = known && state.running;
+            boolean idle = known && !running && !buffer.isUsingAlternateBuffer() && line.stripTrailing().matches(".*[$%#❯>] ?")
                     && column >= line.stripTrailing().length() && widget.getTypedShellCommand().isEmpty();
             int below = 0;
             for (int i = row + 1; i < buffer.getHeight(); i++) {
