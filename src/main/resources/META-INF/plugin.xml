@@ -54,6 +54,13 @@
     <!-- Extension points defined by the plugin.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
     <extensions defaultExtensionNs="com.intellij">
+        <applicationService serviceImplementation="io.snakeorcamel.agentterminal.AgentSettings"/>
+        <applicationService serviceImplementation="io.snakeorcamel.agentterminal.AgentKeymap"/>
+        <postStartupActivity implementation="io.snakeorcamel.agentterminal.AgentStartup"/>
+        <applicationConfigurable parentId="tools" id="SnakeOrCamel" displayName="SnakeOrCamel"
+                                 instance="io.snakeorcamel.agentterminal.AgentConfigurable$Parent"/>
+        <applicationConfigurable parentId="SnakeOrCamel" id="SnakeOrCamel.AgentTerminal" displayName="Agent Terminal"
+                                 instance="io.snakeorcamel.agentterminal.AgentConfigurable"/>
         <toolWindow
             id="JSON Prettier"
             anchor="right"
