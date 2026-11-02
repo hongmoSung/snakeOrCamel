@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "io.snakeOrCamel"
-version = "1.1.0"
+version = "1.2.0"
 
 java {
     toolchain {
@@ -99,6 +99,13 @@ tasks {
     patchPluginXml {
         sinceBuild.set("242")
         changeNotes.set("""
+            <h2>1.2.0</h2>
+            <ul>
+                <li>Added opt-in Agent Terminal integration with project-local Claude, Codex, and Custom launch profiles.</li>
+                <li>Added file and selected-line references targeting the first visible Terminal tab without submitting the prompt.</li>
+                <li>Added readiness detection, timeout recovery, and shortcut conflict checks that preserve existing assignments.</li>
+                <li>Kept Terminal integration optional so Case Converter and JSON Prettier remain available without the Terminal plugin.</li>
+            </ul>
             <h2>1.1.0</h2>
             <ul>
                 <li>Added JSON Prettier tool window for formatting JSON</li>
