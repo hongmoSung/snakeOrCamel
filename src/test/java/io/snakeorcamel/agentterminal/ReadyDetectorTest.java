@@ -41,6 +41,27 @@ class ReadyDetectorTest {
         assertEquals(READY,detector.detect(screen("OpenAI Codex (v0.166.0)\n› Ask Codex to do anything\nGPT-6.1-Sol high Fast · /tmp", "› Ask Codex to do anything",true),null).state());
         assertEquals(STARTING,detector.detect(screen("OpenAI Codex (v0.166.0)\n loading\n› Ask Codex to do anything", "› Ask Codex to do anything",true),null).state());
     }
+    @Test void recognizesCodexCompactComposerAfterTheStartupBannerScrollsAway() {
+        for (String prompt : new String[]{"› Ask Codex to do anything", "› existing question"}) {
+            String text = "Previous response\n" + prompt
+                    + "\nGPT-6.1-Sol high fast · ~/OpenSpace/snakeOrCamel · 에이전트 터미널 계획 구현"
+                    + "\n← for agents · ? for shortcuts\n1 warning · f2 to view";
+            // The terminal cursor precedes the placeholder in an empty composer.
+            var screen = new TerminalAccess.Screen(text,prompt,"› ",2,true,false,true,new Object());
+            var result = detector.detect(screen,null);
+            assertEquals(READY,result.state());
+            assertEquals(AgentProfile.Kind.Codex,result.kind());
+        }
+    }
+    @Test void compactCodexFooterStillRequiresAnActiveUnblockedComposer() {
+        String footer = "\nGPT-6.1-Sol high fast · ~/project\n← for agents · ? for shortcuts";
+        assertEquals(UNKNOWN,detector.detect(screen("› question" + footer,"› question",false),null).state());
+        assertEquals(UNKNOWN,detector.detect(screen("working (1s)\n› question" + footer,"› question",true),null).state());
+        assertEquals(CONFIRMATION,detector.detect(screen("Do you trust this folder?\n›" + footer,"›",true),null).state());
+        assertEquals(UNKNOWN,detector.detect(screen("› earlier question\nbuilding" + footer,"building",true),null).state());
+        assertEquals(UNKNOWN,detector.detect(screen("› question\nGPT-6.1-Sol high fast · ~/project\n? for shortcuts","› question",true),null).state());
+        assertEquals(UNKNOWN,detector.detect(screen("› question\n← for agents · ? for shortcuts","› question",true),null).state());
+    }
     @Test void claudeLoginStatusBlocksAnOtherwiseReadyComposer() {
         assertEquals(CONFIRMATION,detector.detect(screen("Claude Code v2.1.316\nNot logged in · Run /login\n❯ Try fix lint errors", "❯ Try fix lint errors",true),null).state());
     }

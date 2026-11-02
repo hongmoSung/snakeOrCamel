@@ -11,6 +11,8 @@ public final class ReadyDetector {
             "(?i)(do you trust|trust this (folder|workspace)|yes,? (proceed|allow)|allow (once|always)|"
                     + "approve this|permission required|sign in to|log in to|not logged in|run /login|login with|select.*account|"
                     + "would you like to|press enter to|accept.*terms|enter.*code|continue with|confirm.*(access|permission))");
+    private static final Pattern CODEX_MODEL_FOOTER = Pattern.compile("(?im)^\\s*(gpt-|codex-|o[134][ -])[^\\r\\n]*·");
+    private static final Pattern CODEX_AGENT_SHORTCUTS = Pattern.compile("(?im)^[^\\r\\n]*\\bfor agents\\s*·\\s*\\? for shortcuts\\b");
     public Result detect(TerminalAccess.Screen screen, AgentProfile profile) {
         if (!screen.connected()) return new Result(State.STARTING, null);
         String text = screen.text().replace('\u0000',' ');
@@ -32,10 +34,13 @@ public final class ReadyDetector {
                 && (lower.contains("claude code") || lower.contains("? for shortcuts"))) {
             return new Result(State.READY, AgentProfile.Kind.Claude);
         }
-        boolean codexFooter = lower.contains("context left") || lower.contains("? for shortcuts")
-                || Pattern.compile("(?im)^\\s*(gpt-|codex-|o[134][ -]).*·").matcher(text).find();
+        boolean modelFooter = CODEX_MODEL_FOOTER.matcher(text).find();
+        boolean codexFooter = lower.contains("context left") || lower.contains("? for shortcuts") || modelFooter;
+        // Codex's compact composer keeps its model and agent-shortcut footer after the banner
+        // scrolls off screen. It also stays identifiable when a draft replaces the placeholder.
+        boolean compactCodex = modelFooter && CODEX_AGENT_SHORTCUTS.matcher(text).find();
         if (!busy && nearBottom && codexFooter && cursor.startsWith("›") && prefix.startsWith("›")
-                && (lower.contains("openai codex") || (lower.contains("context left") && lower.contains("? for shortcuts")))) {
+                && (lower.contains("openai codex") || (lower.contains("context left") && lower.contains("? for shortcuts")) || compactCodex)) {
             return new Result(State.READY, AgentProfile.Kind.Codex);
         }
         return new Result(State.UNKNOWN, null);

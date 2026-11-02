@@ -69,6 +69,21 @@ public class AgentPlatformTest extends BasePlatformTestCase {
         assertTrue(terminal.first.input.isEmpty()); assertTrue(terminal.second.input.isEmpty());
         assertEquals(0,terminal.first.executions);
     }
+    public void testCompactCodexInExistingFirstTabReceivesReferenceWithoutRelaunchOrEnter() throws Exception {
+        var terminal = setupTerminal(); openDiskFile("first\nsecond\nthird\n");
+        terminal.first.compact = true;
+        myFixture.getEditor().getSelectionModel().setSelection(6,13);
+        var sessions = getProject().getService(AgentSessions.class);
+        sessions.insert(myFixture.getEditor()); sessions.insert(myFixture.getEditor());
+        PlatformTestUtil.waitWithEventsDispatching("compact Codex receives reference",() -> !terminal.first.input.isEmpty(),5);
+        assertEquals(1,terminal.first.input.size());
+        assertTrue(terminal.first.input.getFirst().strip().endsWith("#L2"));
+        assertFalse(terminal.first.input.getFirst().contains("\n"));
+        assertFalse(terminal.first.input.getFirst().contains("\r"));
+        assertEquals(0,terminal.first.executions);
+        assertEquals(0,terminal.created);
+        assertTrue(terminal.second.input.isEmpty());
+    }
     public void testRepeatedRunDoesNotExecuteTwiceWhileAgentIsStarting() {
         var terminal = setupTerminal(); terminal.first.ready = false;
         var profile = new AgentProfile("Custom",AgentProfile.Kind.Custom,"custom");
@@ -166,7 +181,7 @@ public class AgentPlatformTest extends BasePlatformTestCase {
         final List<String> input = new ArrayList<>(); final Object connection=new Object();
         final java.util.concurrent.atomic.AtomicInteger probes = new java.util.concurrent.atomic.AtomicInteger();
         volatile java.util.concurrent.CountDownLatch blockedProbe;
-        boolean ready=true, shell; int executions;
+        boolean ready=true, shell, compact; int executions;
         @Override public Object identity() { return this; }
         @Override public void refreshProcessState() {
             var application = com.intellij.openapi.application.ApplicationManager.getApplication();
@@ -181,7 +196,10 @@ public class AgentPlatformTest extends BasePlatformTestCase {
         }
         @Override public TerminalAccess.Screen screen() {
             com.intellij.openapi.application.ApplicationManager.getApplication().assertIsDispatchThread();
-            return new TerminalAccess.Screen(ready ? "OpenAI Codex\n› existing question\nGPT-6.1-Sol high · /tmp" : "starting",ready ? "› existing question" : "",ready ? "› existing question" : "",2,true,shell,!shell,connection);
+            String text = compact
+                    ? "Previous response\n› existing question\nGPT-6.1-Sol high fast · ~/project\n← for agents · ? for shortcuts"
+                    : "OpenAI Codex\n› existing question\nGPT-6.1-Sol high · /tmp";
+            return new TerminalAccess.Screen(ready ? text : "starting",ready ? "› existing question" : "",ready ? "› existing question" : "",2,true,shell,!shell,connection);
         }
         @Override public Path directory() { return null; }
         @Override public void execute(String command) { executions++; shell=false; }
