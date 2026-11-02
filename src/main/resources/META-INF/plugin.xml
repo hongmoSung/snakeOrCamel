@@ -59,7 +59,8 @@
         <postStartupActivity implementation="io.snakeorcamel.agentterminal.AgentStartup"/>
         <applicationConfigurable parentId="tools" id="SnakeOrCamel" displayName="SnakeOrCamel"
                                  instance="io.snakeorcamel.agentterminal.AgentConfigurable$Parent"/>
-        <applicationConfigurable parentId="SnakeOrCamel" id="SnakeOrCamel.AgentTerminal" displayName="Agent Terminal"
+        <projectService serviceImplementation="io.snakeorcamel.agentterminal.AgentProfiles"/>
+        <projectConfigurable parentId="SnakeOrCamel" id="SnakeOrCamel.AgentTerminal" displayName="Agent Terminal"
                                  instance="io.snakeorcamel.agentterminal.AgentConfigurable"/>
         <toolWindow
             id="JSON Prettier"

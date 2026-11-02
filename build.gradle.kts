@@ -85,6 +85,7 @@ tasks {
     test {
         // The 2024.2 platform fixture requires Java 21; testJava21 runs these tests.
         exclude("**/CaseConvertActionTest.class")
+        exclude("**/*PlatformTest.class")
         javaLauncher.set(project.javaToolchains.launcherFor {
             languageVersion.set(JavaLanguageVersion.of(25))
         })
