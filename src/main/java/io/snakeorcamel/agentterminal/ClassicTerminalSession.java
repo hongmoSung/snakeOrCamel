@@ -28,10 +28,13 @@ final class ClassicTerminalSession implements TerminalAccess.Session {
             // Require a recognizable shell prompt AND the platform's process/typed-input checks.
             boolean running = widget.hasRunningCommands();
             boolean idle = !running && !buffer.isUsingAlternateBuffer() && line.stripTrailing().matches(".*[$%#❯>] ?")
-                    && column >= line.stripTrailing().length() && widget.getTypedShellCommand().isEmpty()
-                    ;
+                    && column >= line.stripTrailing().length() && widget.getTypedShellCommand().isEmpty();
+            int below = 0;
+            for (int i = row + 1; i < buffer.getHeight(); i++) {
+                if (!buffer.getLine(i).getText().replace('\u0000',' ').isBlank()) below++;
+            }
             return new TerminalAccess.Screen(buffer.getScreenLines(), line, line.substring(0,column),
-                    buffer.getHeight()-row-1, true, idle, running, connector);
+                    below, true, idle, running, connector);
         } catch (IllegalStateException ex) { return TerminalAccess.Screen.unknown(); }
         finally { buffer.unlock(); }
     }

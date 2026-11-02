@@ -61,6 +61,8 @@
         <applicationConfigurable parentId="tools" id="SnakeOrCamel" displayName="SnakeOrCamel"
                                  instance="io.snakeorcamel.agentterminal.AgentConfigurable$Parent"/>
         <projectService serviceImplementation="io.snakeorcamel.agentterminal.AgentProfiles"/>
+        <projectService serviceImplementation="io.snakeorcamel.agentterminal.AgentSessions"/>
+        <notificationGroup id="SnakeOrCamel Agent Terminal" displayType="BALLOON"/>
         <projectConfigurable parentId="SnakeOrCamel" id="SnakeOrCamel.AgentTerminal" displayName="Agent Terminal"
                                  instance="io.snakeorcamel.agentterminal.AgentConfigurable"/>
         <toolWindow
@@ -71,6 +73,15 @@
         />
     </extensions>
     <actions>
+        <group id="SnakeOrCamel.AgentTerminal.Menu" text="SnakeOrCamel" popup="true">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+            <action id="SnakeOrCamel.AgentTerminal.Run" class="io.snakeorcamel.agentterminal.AgentRunAction"
+                    text="Run Agent…" description="Run a saved agent profile in its own Terminal tab"/>
+            <action id="SnakeOrCamel.AgentTerminal.InsertReference" class="io.snakeorcamel.agentterminal.AgentInsertReferenceAction"
+                    text="Insert File Reference into First Terminal Tab" description="Insert the editor reference without Enter">
+                <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            </action>
+        </group>
         <action
             id="Name.Convert"
             class="io.snakeorcamel.caseconvert.CaseConvertAction"

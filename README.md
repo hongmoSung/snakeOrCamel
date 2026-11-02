@@ -22,6 +22,13 @@
   - Convert multiple selections simultaneously
   - Perfect for batch operations
 
+- **Agent Terminal (opt-in)**:
+  - Save project-local Claude, Codex, or Custom launch profiles.
+  - Insert file or selected-line references into the **first visible Terminal tab**, preserving the question without pressing Enter.
+  - Disabled by default. Enable under **Settings → Tools → SnakeOrCamel → Agent Terminal** after reviewing shortcut conflicts and behavior.
+  - Use **Tools → SnakeOrCamel → Run Agent…** or the editor reference action. The reference shortcut is `⌥⌘K` on macOS / `Ctrl+Alt+K` on Windows and Linux when no existing assignment conflicts.
+  - See the [usage, recovery, and verification notes](./docs/agent-terminal.md), including remaining sandbox UI checks and CLI detection limits.
+
 ## Usage
 
 1. **Select** the text you want to convert

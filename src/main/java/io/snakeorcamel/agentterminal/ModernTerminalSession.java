@@ -64,7 +64,6 @@ final class ModernTerminalSession implements TerminalAccess.Session {
         String prefix = call(MODEL, snapshot, "getText", rowStart, cursor).toString();
         long first = number(LINE, call(MODEL, snapshot, "getFirstLineIndex"));
         long last = number(LINE, call(MODEL, snapshot, "getLastLineIndex"));
-        long cursorIndex = number(LINE, cursorRow);
         Object grid = call(VIEW, view, "getGridSize");
         if (grid == null) return TerminalAccess.Screen.unknown();
         int rows = (Integer) call("org.jetbrains.plugins.terminal.session.TerminalGridSize", grid, "getRows");
@@ -72,8 +71,9 @@ final class ModernTerminalSession implements TerminalAccess.Session {
         Object start = call(MODEL, snapshot, "getStartOfLine", startLine);
         Object end = call(MODEL, snapshot, "getEndOffset");
         String screen = call(MODEL, snapshot, "getText", start, end).toString();
+        int below = (int) call(MODEL,snapshot,"getText",rowEnd,end).toString().lines().filter(s -> !s.isBlank()).count();
         boolean idle = emptyShell(snapshot, end, active == call("org.jetbrains.plugins.terminal.view.TerminalOutputModelsSet", models, "getRegular"));
-        return new TerminalAccess.Screen(screen, line, prefix, (int)(last-cursorIndex), true, idle, commandRunning(),
+        return new TerminalAccess.Screen(screen, line, prefix, below, true, idle, commandRunning(),
                 call(VIEW, view, "getStartupOptionsDeferred"));
     }
     private boolean commandRunning() {
