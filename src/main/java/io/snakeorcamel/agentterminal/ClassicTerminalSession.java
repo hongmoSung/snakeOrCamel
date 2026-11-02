@@ -1,0 +1,56 @@
+package io.snakeorcamel.agentterminal;
+
+import com.intellij.ui.content.Content;
+import org.jetbrains.plugins.terminal.ShellTerminalWidget;
+import java.nio.file.Path;
+import java.util.function.BooleanSupplier;
+
+final class ClassicTerminalSession implements TerminalAccess.Session {
+    private final ShellTerminalWidget widget;
+    private final Content content;
+    private final BooleanSupplier exists;
+    private final Runnable focus;
+    ClassicTerminalSession(ShellTerminalWidget widget, Content content, BooleanSupplier exists, Runnable focus) {
+        this.widget = widget; this.content = content; this.exists = exists; this.focus = focus;
+    }
+    @Override public Object identity() { return widget; }
+    @Override public boolean exists() { return content.getManager() != null && exists.getAsBoolean(); }
+    @Override public TerminalAccess.Screen screen() {
+        var connector = widget.getTtyConnector();
+        if (connector == null || !connector.isConnected()) return TerminalAccess.Screen.unknown();
+        var buffer = widget.getTerminalTextBuffer();
+        if (!buffer.tryLock()) return TerminalAccess.Screen.unknown();
+        try {
+            var terminal = widget.getTerminal();
+            int row = Math.max(0, Math.min(buffer.getHeight()-1, terminal.getCursorY()-1));
+            String line = buffer.getLine(row).getText();
+            int column = Math.max(0, Math.min(line.length(), terminal.getCursorX()-1));
+            // Require a recognizable shell prompt AND the platform's process/typed-input checks.
+            boolean running = widget.hasRunningCommands();
+            boolean idle = !running && !buffer.isUsingAlternateBuffer() && line.stripTrailing().matches(".*[$%#❯>] ?")
+                    && column >= line.stripTrailing().length() && widget.getTypedShellCommand().isEmpty()
+                    ;
+            return new TerminalAccess.Screen(buffer.getScreenLines(), line, line.substring(0,column),
+                    buffer.getHeight()-row-1, true, idle, running, connector);
+        } catch (IllegalStateException ex) { return TerminalAccess.Screen.unknown(); }
+        finally { buffer.unlock(); }
+    }
+    // Classic 2024.2 has no reliable public live working-directory accessor.
+    @Override public Path directory() { return null; }
+    @Override public void execute(String command) {
+        if (!screen().emptyShell()) throw new IllegalStateException("The shell is not empty and ready. No command was sent.");
+        send(command + "\r");
+    }
+    @Override public void insert(String text) {
+        if (AgentProfile.hasControl(text)) throw new IllegalArgumentException("Reference contains control characters.");
+        send(text);
+    }
+    private void send(String text) {
+        var starter = widget.getTerminalStarter();
+        if (starter == null || widget.getTtyConnector() == null || !widget.getTtyConnector().isConnected()) {
+            throw new IllegalStateException("Terminal process is not connected.");
+        }
+        starter.sendString(text, false);
+    }
+    @Override public void focus() { focus.run(); widget.requestFocus(); }
+}

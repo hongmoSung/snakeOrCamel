@@ -26,6 +26,7 @@ repositories {
 dependencies {
     intellijPlatform {
         create(IntelliJPlatformType.IntellijIdeaCommunity, "2024.2")
+        bundledPlugin("org.jetbrains.plugins.terminal")
         // JSON is part of the platform in 2024.2; it became a separate plugin in 2024.3.
         pluginVerifier()
         testFramework(TestFrameworkType.Platform)

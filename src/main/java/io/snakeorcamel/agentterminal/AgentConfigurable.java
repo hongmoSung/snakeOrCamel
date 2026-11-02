@@ -48,8 +48,9 @@ public final class AgentConfigurable implements SearchableConfigurable {
         reset(); return panel;
     }
     static String pluginStatus(String id) {
-        var descriptor = PluginManagerCore.getPlugin(PluginId.getId(id));
-        return descriptor == null ? "not installed" : descriptor.isEnabled() ? "installed, enabled" : "installed, disabled";
+        PluginId plugin = PluginId.getId(id);
+        return !PluginManagerCore.isPluginInstalled(plugin) ? "not installed"
+                : PluginManagerCore.isDisabled(plugin) ? "installed, disabled" : "installed, enabled";
     }
     private JComponent profilePanel() {
         JPanel area = new JPanel(new BorderLayout(8, 8));

@@ -14,8 +14,9 @@ public final class AgentKeymap implements Disposable {
     public AgentKeymap() {
         ApplicationManager.getApplication().getMessageBus().connect(this).subscribe(KeymapManagerListener.TOPIC, new KeymapManagerListener() {
             @Override public void activeKeymapChanged(Keymap keymap) { reconcile(); }
-            @Override public void shortcutChanged(Keymap keymap, String actionId) { edited(keymap, actionId); }
-            @Override public void shortcutChanged(Keymap keymap, String actionId, boolean fromSettings) { edited(keymap, actionId); }
+            @Override public void shortcutsChanged(Keymap keymap, Collection<String> actionIds, boolean fromSettings) {
+                for (String id : actionIds) edited(keymap,id);
+            }
         });
     }
     public static AgentKeymap getInstance() { return ApplicationManager.getApplication().getService(AgentKeymap.class); }
@@ -44,7 +45,7 @@ public final class AgentKeymap implements Disposable {
                 if (!settings.isEnabled() || keymap != manager.getActiveKeymap() || !conflicts(keymap).isEmpty()) removeOwned(keymap);
             }
             Keymap active = manager.getActiveKeymap();
-            if (settings.isEnabled() && active.canModify() && conflicts(active).isEmpty()
+            if (settings.isEnabled() && conflicts(active).isEmpty()
                     && Arrays.stream(active.getShortcuts(AgentSettings.INSERT_ACTION)).noneMatch(shortcut()::equals)) {
                 active.addShortcut(AgentSettings.INSERT_ACTION, shortcut());
                 settings.getState().ownedKeymaps.add(active.getName());
@@ -63,7 +64,6 @@ public final class AgentKeymap implements Disposable {
         Keymap keymap = KeymapManager.getInstance().getActiveKeymap();
         List<String> ids = conflicts(keymap);
         if (!ids.isEmpty()) return "Shortcut conflict: " + String.join(", ", ids) + ". Existing assignments are preserved; use the menu or edit Keymap.";
-        if (!keymap.canModify()) return "Current Keymap is read-only. Assign Insert File Reference in Settings → Keymap to use the shortcut.";
         return "No conflicting assignment in " + keymap.getName() + ". The shortcut connects after enabling and applying.";
     }
     @Override public void dispose() { /* Persist ownership for the next IDE session; do not undo user edits. */ }

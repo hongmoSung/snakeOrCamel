@@ -1,0 +1,6 @@
+<idea-plugin>
+    <extensions defaultExtensionNs="com.intellij">
+        <projectService serviceInterface="io.snakeorcamel.agentterminal.TerminalAccess"
+                        serviceImplementation="io.snakeorcamel.agentterminal.TerminalAdapter"/>
+    </extensions>
+</idea-plugin>
