@@ -58,7 +58,7 @@
             id="JSON Prettier"
             anchor="right"
             icon="/icons/jsonPrettier.svg"
-            factoryClass="io.snakeorcamel.JsonPrettierToolWindowFactory"
+            factoryClass="io.snakeorcamel.jsonprettier.JsonPrettierToolWindowFactory"
         />
     </extensions>
     <actions>

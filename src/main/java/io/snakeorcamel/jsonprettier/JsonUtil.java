@@ -1,8 +1,11 @@
-package io.snakeorcamel;
+package io.snakeorcamel.jsonprettier;
 
 import com.google.gson.*;
 
-public class JsonUtil {
+public final class JsonUtil {
+
+    private JsonUtil() {
+    }
 
     private static final Gson GSON = new GsonBuilder()
             .setPrettyPrinting()

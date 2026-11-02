@@ -1,4 +1,4 @@
-package io.snakeorcamel;
+package io.snakeorcamel.jsonprettier;
 
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Disposer;
@@ -13,10 +13,9 @@ public class JsonPrettierToolWindowFactory implements ToolWindowFactory {
     @Override
     public void createToolWindowContent(@NotNull Project project, @NotNull ToolWindow toolWindow) {
         JsonPrettierPanel panel = new JsonPrettierPanel(project);
-        ContentFactory contentFactory = ContentFactory.getInstance();
-        Content content = contentFactory.createContent(panel, "", false);
-        toolWindow.getContentManager().addContent(content);
+        Disposer.register(toolWindow.getDisposable(), panel);
 
-        Disposer.register(toolWindow.getDisposable(), panel::dispose);
+        Content content = ContentFactory.getInstance().createContent(panel, "", false);
+        toolWindow.getContentManager().addContent(content);
     }
 }
