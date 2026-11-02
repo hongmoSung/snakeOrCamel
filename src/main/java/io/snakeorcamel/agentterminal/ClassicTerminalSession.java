@@ -33,9 +33,21 @@ final class ClassicTerminalSession implements TerminalAccess.Session {
             if (widget.getTtyConnector() == connector && connector.isConnected()) {
                 processState = new ProcessState(connector,running,System.nanoTime());
             }
-        } catch (IllegalStateException ignored) {
+        } catch (RuntimeException | LinkageError ex) {
+            AgentSessions.diagnostic(this, "probe", TerminalAccess.ProcessStatus.UNKNOWN, ex);
             // Unsupported connectors have unknown state, never a confirmed empty shell.
         }
+    }
+    @Override public TerminalAccess.Connection connection() {
+        ApplicationManager.getApplication().assertIsDispatchThread();
+        var connector = widget.getTtyConnector();
+        boolean connected = connector != null && connector.isConnected();
+        ProcessState state = processState;
+        var status = connected && state != null && state.connector == connector
+                && System.nanoTime() - state.sampledAt <= TimeUnit.SECONDS.toNanos(1)
+                ? (state.running ? TerminalAccess.ProcessStatus.RUNNING : TerminalAccess.ProcessStatus.IDLE)
+                : TerminalAccess.ProcessStatus.UNKNOWN;
+        return new TerminalAccess.Connection(connector, connected, status);
     }
     @Override public TerminalAccess.Screen screen() {
         ApplicationManager.getApplication().assertIsDispatchThread();
@@ -53,8 +65,10 @@ final class ClassicTerminalSession implements TerminalAccess.Session {
             boolean known = state != null && state.connector == connector
                     && System.nanoTime()-state.sampledAt <= TimeUnit.SECONDS.toNanos(1);
             boolean running = known && state.running;
-            boolean idle = known && !running && !buffer.isUsingAlternateBuffer() && line.stripTrailing().matches(".*[$%#❯>] ?")
-                    && column >= line.stripTrailing().length() && widget.getTypedShellCommand().isEmpty();
+            // Classic tracks shell input independently of the rendered prompt. Prompt themes,
+            // right prompts, and multi-line prompts are not evidence of a typed command.
+            boolean idle = known && !running && !buffer.isUsingAlternateBuffer()
+                    && widget.getTypedShellCommand().isEmpty();
             int below = 0;
             for (int i = row + 1; i < buffer.getHeight(); i++) {
                 if (!buffer.getLine(i).getText().replace('\u0000',' ').isBlank()) below++;
@@ -64,7 +78,7 @@ final class ClassicTerminalSession implements TerminalAccess.Session {
         } catch (IllegalStateException ex) { return TerminalAccess.Screen.unknown(); }
         finally { buffer.unlock(); }
     }
-    // Classic 2024.2 has no reliable public live working-directory accessor.
+    // This Classic adapter has no reliable public live working-directory accessor.
     @Override public Path directory() { return null; }
     @Override public void execute(String command) {
         if (!screen().emptyShell()) throw new IllegalStateException("The shell is not empty and ready. No command was sent.");

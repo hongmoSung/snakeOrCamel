@@ -3,19 +3,36 @@ package io.snakeorcamel.agentterminal;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.actionSystem.KeyboardShortcut;
+import com.intellij.openapi.actionSystem.Shortcut;
 import com.intellij.openapi.keymap.*;
+import com.intellij.openapi.keymap.ex.KeymapManagerEx;
 import com.intellij.openapi.util.SystemInfo;
 import javax.swing.KeyStroke;
 import java.util.*;
 
-/** Owns only automatically added bindings. User edits relinquish ownership. */
+/** Persistent, reversible shortcut changes. Only explicit enable or a keymap switch acquires ownership. */
 public final class AgentKeymap implements Disposable {
     private boolean changing;
     public AgentKeymap() {
         ApplicationManager.getApplication().getMessageBus().connect(this).subscribe(KeymapManagerListener.TOPIC, new KeymapManagerListener() {
             @Override public void activeKeymapChanged(Keymap keymap) { reconcile(); }
             @Override public void shortcutsChanged(Keymap keymap, Collection<String> actionIds, boolean fromSettings) {
-                for (String id : actionIds) edited(keymap,id);
+                if (!changing) {
+                    validateOwnership(keymap);
+                    // A manual conflicting assignment takes precedence over our automatic binding.
+                    if (!conflicts(keymap).isEmpty()) {
+                        changing = true;
+                        try {
+                            for (var change : state().keymapChanges) {
+                                if (change.name.equals(keymap.getName()) && !change.addedShortcut.isEmpty()) {
+                                    keymap.removeShortcut(AgentSettings.INSERT_ACTION,
+                                            new KeyboardShortcut(KeyStroke.getKeyStroke(change.addedShortcut), null));
+                                    change.addedShortcut = "";
+                                }
+                            }
+                        } finally { changing = false; }
+                    }
+                }
             }
         });
     }
@@ -27,44 +44,106 @@ public final class AgentKeymap implements Disposable {
         return Arrays.stream(keymap.getActionIds(shortcut().getFirstKeyStroke()))
                 .filter(id -> !id.equals(AgentSettings.INSERT_ACTION)).sorted().toList();
     }
-    private void edited(Keymap keymap, String id) {
-        if (changing) return;
-        if (id.equals(AgentSettings.INSERT_ACTION)) AgentSettings.getInstance().getState().ownedKeymaps.remove(keymap.getName());
-        // A new conflicting assignment must not leave our automatic binding active.
-        if (!conflicts(keymap).isEmpty()) removeOwned(keymap);
+    private static List<String> snapshot(Keymap keymap, String id) {
+        return Arrays.stream(keymap.getShortcuts(id)).map(Object::toString).sorted().toList();
     }
-    public void reconcile() {
+    private static boolean contains(Keymap keymap, String id, Shortcut shortcut) {
+        return Arrays.asList(keymap.getShortcuts(id)).contains(shortcut);
+    }
+    private AgentSettings.State state() { return AgentSettings.getInstance().getState(); }
+
+    public void applyEnabled(boolean enabled) {
+        boolean enableTransition = enabled && !state().enabled;
+        state().enabled = enabled;
+        reconcile(enableTransition);
+    }
+    public void reconcile() { reconcile(false); }
+    private void reconcile(boolean enableTransition) {
         if (changing) return;
         changing = true;
         try {
-            var settings = AgentSettings.getInstance();
             var manager = KeymapManager.getInstance();
-            for (String name : List.copyOf(settings.getState().ownedKeymaps)) {
-                Keymap keymap = manager.getKeymap(name);
-                if (keymap == null) { settings.getState().ownedKeymaps.remove(name); continue; }
-                if (!settings.isEnabled() || keymap != manager.getActiveKeymap() || !conflicts(keymap).isEmpty()) removeOwned(keymap);
-            }
             Keymap active = manager.getActiveKeymap();
-            if (settings.isEnabled() && conflicts(active).isEmpty()
-                    && Arrays.stream(active.getShortcuts(AgentSettings.INSERT_ACTION)).noneMatch(shortcut()::equals)) {
-                active.addShortcut(AgentSettings.INSERT_ACTION, shortcut());
-                settings.getState().ownedKeymaps.add(active.getName());
+            // Migrate ownership from versions which never displaced existing assignments.
+            for (String name : state().ownedKeymaps) {
+                var change = new AgentSettings.KeymapChange();
+                change.name = name; change.addedShortcut = shortcut().getFirstKeyStroke().toString();
+                state().keymapChanges.add(change);
             }
-            if (!settings.isEnabled()) ApplicationManager.getApplication().getMessageBus().syncPublisher(AgentSettings.DISABLED).run();
+            state().ownedKeymaps.clear();
+            boolean switched = !state().activeKeymap.isEmpty() && !state().activeKeymap.equals(active.getName());
+            for (var change : List.copyOf(state().keymapChanges)) {
+                Keymap keymap = manager.getKeymap(change.name);
+                if (keymap != null) validateOwnership(keymap);
+                if (!state().enabled || !change.name.equals(active.getName())) {
+                    if (keymap != null) restore(keymap, change);
+                    state().keymapChanges.remove(change);
+                }
+            }
+            if (state().enabled && (enableTransition || switched)) active = install(active);
+            state().activeKeymap = active.getName();
+            if (!state().enabled) ApplicationManager.getApplication().getMessageBus().syncPublisher(AgentSettings.DISABLED).run();
         } finally { changing = false; }
     }
-    private void removeOwned(Keymap keymap) {
-        var owned = AgentSettings.getInstance().getState().ownedKeymaps;
-        if (!owned.remove(keymap.getName())) return;
-        boolean previous = changing; changing = true;
-        try { keymap.removeShortcut(AgentSettings.INSERT_ACTION, shortcut()); }
-        finally { changing = previous; }
+    private Keymap install(Keymap keymap) {
+        if (!keymap.canModify()) {
+            // Bundled schemes are not persisted by the IDE. Use a derived, writable scheme.
+            var manager = KeymapManagerEx.getInstanceEx();
+            String base = keymap.getName() + " (Agent Terminal)";
+            String name = base;
+            for (int i = 2; manager.getKeymap(name) != null; i++) name = base + " " + i;
+            keymap = keymap.deriveKeymap(name);
+            manager.getSchemeManager().addScheme(keymap);
+            manager.setActiveKeymap(keymap);
+        }
+        var change = new AgentSettings.KeymapChange();
+        change.name = keymap.getName();
+        state().keymapChanges.add(change);
+        for (String id : conflicts(keymap)) {
+            for (Shortcut binding : keymap.getShortcuts(id)) {
+                if (binding instanceof KeyboardShortcut keyboard && keyboard.getFirstKeyStroke().equals(shortcut().getFirstKeyStroke())) {
+                    var removed = new AgentSettings.RemovedBinding();
+                    removed.actionId = id;
+                    removed.first = keyboard.getFirstKeyStroke().toString();
+                    removed.second = keyboard.getSecondKeyStroke() == null ? "" : keyboard.getSecondKeyStroke().toString();
+                    change.removed.add(removed);
+                    keymap.removeShortcut(id, binding);
+                }
+            }
+        }
+        for (var removed : change.removed) removed.expected = new ArrayList<>(snapshot(keymap, removed.actionId));
+        if (!contains(keymap, AgentSettings.INSERT_ACTION, shortcut())) {
+            change.addedShortcut = shortcut().getFirstKeyStroke().toString();
+            keymap.addShortcut(AgentSettings.INSERT_ACTION, shortcut());
+        }
+        return keymap;
+    }
+    private void validateOwnership(Keymap keymap) {
+        for (var change : state().keymapChanges) {
+            if (!change.name.equals(keymap.getName())) continue;
+            if (!change.addedShortcut.isEmpty() && !contains(keymap, AgentSettings.INSERT_ACTION,
+                    new KeyboardShortcut(KeyStroke.getKeyStroke(change.addedShortcut), null))) change.addedShortcut = "";
+            // If an action was edited while we were active (or while the IDE was closed), leave it alone.
+            change.removed.removeIf(binding -> !binding.expected.equals(snapshot(keymap, binding.actionId)));
+        }
+    }
+    private void restore(Keymap keymap, AgentSettings.KeymapChange change) {
+        if (!change.addedShortcut.isEmpty()) keymap.removeShortcut(AgentSettings.INSERT_ACTION,
+                new KeyboardShortcut(KeyStroke.getKeyStroke(change.addedShortcut), null));
+        for (var binding : change.removed) keymap.addShortcut(binding.actionId,
+                new KeyboardShortcut(KeyStroke.getKeyStroke(binding.first),
+                        binding.second.isEmpty() ? null : KeyStroke.getKeyStroke(binding.second)));
     }
     public String status() {
         Keymap keymap = KeymapManager.getInstance().getActiveKeymap();
-        List<String> ids = conflicts(keymap);
-        if (!ids.isEmpty()) return "Shortcut conflict: " + String.join(", ", ids) + ". Existing assignments are preserved; use the menu or edit Keymap.";
-        return "No conflicting assignment in " + keymap.getName() + ". The shortcut connects after enabling and applying.";
+        String bindings = Arrays.stream(keymap.getShortcuts(AgentSettings.INSERT_ACTION))
+                .map(KeymapUtil::getShortcutText).collect(java.util.stream.Collectors.joining(", "));
+        List<String> displaced = state().keymapChanges.stream().filter(c -> c.name.equals(keymap.getName()))
+                .flatMap(c -> c.removed.stream()).map(b -> b.actionId).distinct().sorted().toList();
+        return "Keymap: " + keymap.getPresentableName() + ". Registered shortcuts: " + (bindings.isEmpty() ? "none" : bindings)
+                + ". Replaced assignments: " + (displaced.isEmpty() ? "none" : String.join(", ", displaced))
+                + ". Applying OFF restores unchanged assignments. Applying OFF then ON assigns "
+                + KeymapUtil.getShortcutText(shortcut()) + " with priority.";
     }
-    @Override public void dispose() { /* Persist ownership for the next IDE session; do not undo user edits. */ }
+    @Override public void dispose() { /* Keep the journal for restoration after restart. */ }
 }

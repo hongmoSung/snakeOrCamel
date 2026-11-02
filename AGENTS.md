@@ -4,7 +4,7 @@ This file provides project context and working instructions for AI coding agents
 
 ## Project Overview
 
-snakeOrCamel is a JetBrains IntelliJ Platform plugin that provides text conversion utilities. It requires the platform and JSON modules declared in `plugin.xml`. Configured compatibility verification targets IntelliJ IDEA Community 2024.2 and IntelliJ IDEA 2026.2.4; compatibility with other IntelliJ-based IDEs must be verified separately.
+snakeOrCamel is a JetBrains IntelliJ Platform plugin that provides text conversion utilities. It requires the platform and JSON modules declared in `plugin.xml`. Configured compatibility verification targets IntelliJ IDEA 2026.2.4; compatibility with other IntelliJ-based IDEs must be verified separately.
 
 **Features:**
 - Convert text between snake_case/kebab-case and camelCase
@@ -12,7 +12,7 @@ snakeOrCamel is a JetBrains IntelliJ Platform plugin that provides text conversi
 
 ## Build Commands
 
-Use JDK 25 as `JAVA_HOME` and install JDK 21 for runtime compatibility tests. All Java sources compile with `--release 21`.
+Use JDK 25 as `JAVA_HOME`. Source, standard APIs, bytecode, and tests all target Java 25.
 
 ```bash
 # Build the plugin
@@ -21,17 +21,11 @@ Use JDK 25 as `JAVA_HOME` and install JDK 21 for runtime compatibility tests. Al
 # Run plugin in IDE sandbox for testing
 ./gradlew runIde
 
-# Run in a separate IntelliJ IDEA 2026.2.4 sandbox
-./gradlew runIde2026
-
-# Clean build, test on Java 25 and 21, and verify both supported IDE targets
+# Clean build, test on Java 25, and verify IntelliJ IDEA 2026.2.4
 ./gradlew clean build verifyPlugin
 
-# Run utility tests on both Java runtimes and editor fixture tests on Java 21
-./gradlew test testJava21
-
-# Run utility and editor fixture tests on Java 21 only
-./gradlew testJava21
+# Run utility and IntelliJ platform fixture tests
+./gradlew test
 
 # Sign plugin for distribution (requires env vars: CERTIFICATE_CHAIN, PRIVATE_KEY, PRIVATE_KEY_PASSWORD)
 ./gradlew signPlugin
@@ -60,13 +54,12 @@ Plugin configuration: `src/main/resources/META-INF/plugin.xml`
 
 ## Tech Stack
 
-- Build and compilation: JDK 25; Java 21 source, standard APIs, and bytecode (`--release 21`)
+- Build, compilation, and tests: JDK 25 (class major version 69)
 - Gradle 9.8.2 with IntelliJ Platform Gradle Plugin 2.19.0
-- Compile and default sandbox IDE: IntelliJ IDEA Community 2024.2 (sinceBuild 242, no untilBuild)
-- Additional sandbox and verification IDE: unified IntelliJ IDEA 2026.2.4
-- `check` includes utility tests on Java 25 and Java 21 and IntelliJ 2024.2 editor fixture tests on Java 21; Plugin Verifier uses each IDE's bundled JBR
+- Compile, sandbox, and verification IDE: IntelliJ IDEA 2026.2.4 (sinceBuild 262.11879.100, no untilBuild)
+- `test` includes utility and IntelliJ platform fixture tests; Plugin Verifier uses the IDE's bundled JBR
 - Gson for JSON processing
 
 Automated tests cover `ConvertUtil` and the registered case conversion action using IntelliJ editor fixtures, including multiple selections and grouped Undo/Redo. Changes to editor actions or the JSON tool window also need the sandbox smoke tests described in `docs/development.md`; automated test success alone does not verify those UI behaviors.
 
-Keep IntelliJ API calls compatible with the 2024.2 compilation baseline and preserve `--release 21` when changing build settings. See `docs/development.md` for setup and the manual verification checklist.
+Use public IntelliJ IDEA 2026.2.4 APIs and Java 25. Keep Classic and Reworked terminal engines supported. See `docs/development.md` for setup and the manual verification checklist.

@@ -13,9 +13,16 @@ import java.util.*;
 /** Loaded exclusively from the Terminal optional dependency descriptor. */
 public final class TerminalAdapter implements TerminalAccess {
     private final Project project;
-    public TerminalAdapter(Project project) { this.project = project; }
+    private final java.util.function.Supplier<ToolWindow> windowProvider;
+    public TerminalAdapter(Project project) {
+        this(project, () -> ToolWindowManager.getInstance(project).getToolWindow("Terminal"));
+    }
+    TerminalAdapter(Project project, java.util.function.Supplier<ToolWindow> windowProvider) {
+        this.project = project;
+        this.windowProvider = windowProvider;
+    }
     private ToolWindow window() {
-        ToolWindow window = ToolWindowManager.getInstance(project).getToolWindow("Terminal");
+        ToolWindow window = windowProvider.get();
         if (window == null) throw new IllegalStateException("Terminal is not available in this IDE.");
         return window;
     }
@@ -33,6 +40,7 @@ public final class TerminalAdapter implements TerminalAccess {
     private Point position(ContentManager manager) {
         return SwingUtilities.convertPoint(manager.getComponent(), 0, 0, window().getComponent());
     }
+    @Override public void show(Runnable ready) { window().show(ready); }
     @Override public Session first() {
         var contents = contents(); return contents.isEmpty() ? null : wrap(contents.getFirst());
     }
@@ -41,12 +49,14 @@ public final class TerminalAdapter implements TerminalAccess {
         if (modern != null) return modern;
         var widget = TerminalToolWindowManager.getWidgetByContent(content);
         if (widget instanceof ShellTerminalWidget shell) return new ClassicTerminalSession(shell, content, () -> contents().contains(content), () -> focus(content));
-        throw new IllegalStateException("This terminal engine is not supported. In IDEA 2024.2 switch Settings → Tools → Terminal to Classic.");
+        throw new IllegalStateException("This terminal engine is not supported. Switch Settings → Tools → Terminal to Classic or Reworked.");
     }
     @Override public Session create(Path directory, String name) {
         window().show();
-        Session modern = ModernTerminalSession.create(project, directory, name, c -> contents().contains(c), this::focus);
-        if (modern != null) return modern;
+        if (org.jetbrains.plugins.terminal.TerminalOptionsProvider.getInstance().getTerminalEngine()
+                == org.jetbrains.plugins.terminal.TerminalEngine.REWORKED) {
+            return ModernTerminalSession.create(project, directory, name, c -> contents().contains(c), this::focus);
+        }
         var widget = TerminalToolWindowManager.getInstance(project).createShellWidget(directory.toString(), name, true, true);
         for (Content content : contents()) if (TerminalToolWindowManager.getWidgetByContent(content) == ShellTerminalWidget.asShellJediTermWidget(widget)) return wrap(content);
         throw new IllegalStateException("Could not identify the new terminal tab. No command was sent.");

@@ -25,24 +25,31 @@ repositories {
 
 dependencies {
     intellijPlatform {
-        create(IntelliJPlatformType.IntellijIdeaCommunity, "2024.2")
+        create(IntelliJPlatformType.IntellijIdea, "2026.2.4")
         bundledPlugin("org.jetbrains.plugins.terminal")
-        // JSON is part of the platform in 2024.2; it became a separate plugin in 2024.3.
+        bundledPlugin("com.intellij.modules.json")
         pluginVerifier()
         testFramework(TestFrameworkType.Platform)
     }
 
     testImplementation(platform("org.junit:junit-bom:5.10.2"))
     testImplementation("org.junit.jupiter:junit-jupiter")
-    // BasePlatformTestCase uses JUnit 3; Vintage runs it alongside the JUnit 5 tests.
     testImplementation("junit:junit:4.13.2")
     testRuntimeOnly("org.junit.vintage:junit-vintage-engine")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
+val platformDependency = configurations.named("intellijPlatformDependency")
+listOf("compileClasspath", "testCompileClasspath").forEach { classpathName ->
+    configurations.named(classpathName) {
+        incoming.beforeResolve {
+            platformDependency.get().resolve()
+        }
+    }
+}
+
 intellijPlatform {
     pluginVerification {
-        useBundledRuntime.set(true)
         failureLevel.set(listOf(
             VerifyPluginTask.FailureLevel.COMPATIBILITY_PROBLEMS,
             VerifyPluginTask.FailureLevel.INTERNAL_API_USAGES,
@@ -52,58 +59,25 @@ intellijPlatform {
             VerifyPluginTask.FailureLevel.PLUGIN_STRUCTURE_WARNINGS,
         ))
         ides {
-            create(IntelliJPlatformType.IntellijIdeaCommunity, "2024.2")
-            create(IntelliJPlatformType.IntellijIdea, "2026.2.4")
+            current()
         }
     }
 }
 
-intellijPlatformTesting.runIde.register("runIde2026") {
-    type = IntelliJPlatformType.IntellijIdea
-    version = "2026.2.4"
-}
-
-val testJava21 = intellijPlatformTesting.testIde.register("testJava21") {
-    task {
-        description = "Runs unit tests and IntelliJ editor fixture tests on Java 21."
-        group = "verification"
-        javaLauncher.set(javaToolchains.launcherFor {
-            languageVersion.set(JavaLanguageVersion.of(21))
-        })
-        shouldRunAfter(tasks.test)
-    }
-}
-
 tasks {
-    withType<JavaCompile>().configureEach {
-        options.release.set(21)
-    }
-
-    withType<Test> {
+    test {
         useJUnitPlatform()
     }
 
-    test {
-        // The 2024.2 platform fixture requires Java 21; testJava21 runs these tests.
-        exclude("**/CaseConvertActionTest.class")
-        exclude("**/*PlatformTest.class")
-        javaLauncher.set(project.javaToolchains.launcherFor {
-            languageVersion.set(JavaLanguageVersion.of(25))
-        })
-    }
-
-    check {
-        dependsOn(testJava21)
-    }
-
     patchPluginXml {
-        sinceBuild.set("242")
+        sinceBuild.set("262.11879.100")
         changeNotes.set("""
             <h2>1.2.0</h2>
             <ul>
+                <li>Requires IntelliJ IDEA 2026.2.4 or newer with Java 25.</li>
                 <li>Added opt-in Agent Terminal integration with project-local Claude, Codex, and Custom launch profiles.</li>
                 <li>Added file and selected-line references targeting the first visible Terminal tab without submitting the prompt.</li>
-                <li>Added readiness detection, timeout recovery, and shortcut conflict checks that preserve existing assignments.</li>
+                <li>Added readiness detection, timeout recovery, and reversible shortcut assignment with persistent conflict backups.</li>
                 <li>Kept Terminal integration optional so Case Converter and JSON Prettier remain available without the Terminal plugin.</li>
             </ul>
             <h2>1.1.0</h2>

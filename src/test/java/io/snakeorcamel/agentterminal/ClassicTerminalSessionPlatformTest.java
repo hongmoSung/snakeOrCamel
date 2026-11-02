@@ -35,6 +35,7 @@ public class ClassicTerminalSessionPlatformTest extends BasePlatformTestCase {
         var session = session(widget);
         refresh(session);
 
+        assertEquals(TerminalAccess.ProcessStatus.RUNNING, session.connection().process());
         assertTrue(session.screen().commandRunning());
         assertFalse(session.screen().emptyShell());
         assertEquals(1,widget.probes.get());
@@ -50,6 +51,7 @@ public class ClassicTerminalSessionPlatformTest extends BasePlatformTestCase {
         assertFalse(session.screen().emptyShell());
         assertFalse(session.screen().commandRunning());
         widget.running = true; refresh(session);
+        assertEquals(TerminalAccess.ProcessStatus.RUNNING, session.connection().process());
         assertTrue(session.screen().commandRunning());
     }
 
@@ -59,9 +61,46 @@ public class ClassicTerminalSessionPlatformTest extends BasePlatformTestCase {
         refresh(session); assertTrue(session.screen().emptyShell());
 
         widget.unsupported = true; refresh(session);
+        assertTrue(session.connection().connected());
+        assertEquals(TerminalAccess.ProcessStatus.UNKNOWN, session.connection().process());
 
         assertFalse(session.screen().emptyShell());
         assertFalse(session.screen().commandRunning());
+    }
+
+    public void testCustomPromptDoesNotBlockAnIdleShell() {
+        var widget = widget();
+        widget.getTerminal().writeCharacters("➜ project git:(main) ");
+        var session = session(widget);
+        refresh(session);
+
+        assertTrue(session.screen().emptyShell());
+    }
+
+    public void testRightPromptAfterCursorDoesNotBecomeShellInput() {
+        var widget = widget();
+        widget.getTerminal().writeCharacters("                               19:30");
+        widget.getTerminal().cursorPosition(3, 1);
+        var session = session(widget);
+        refresh(session);
+
+        assertTrue(session.screen().emptyShell());
+    }
+
+    public void testTypedCommandIsPreservedEvenWithPromptLikeSuffix() {
+        var widget = widget();
+        widget.typedCommand = "echo $";
+        widget.getTerminal().writeCharacters(widget.typedCommand);
+        var session = session(widget);
+        refresh(session);
+
+        assertFalse(session.screen().emptyShell());
+        try {
+            session.execute("claude");
+            fail("Must not execute over a typed shell command");
+        } catch (IllegalStateException expected) {
+            assertTrue(expected.getMessage().contains("not empty"));
+        }
     }
 
     private ProbeWidget widget() {
@@ -88,11 +127,12 @@ public class ClassicTerminalSessionPlatformTest extends BasePlatformTestCase {
     private static final class ProbeWidget extends ShellTerminalWidget {
         volatile TtyConnector connector = new ConnectedTty();
         volatile boolean running;
+        String typedCommand = "";
         volatile boolean unsupported;
         final AtomicInteger probes = new AtomicInteger();
         ProbeWidget(Project project, Disposable parent) { super(project,new JBTerminalSystemSettingsProvider(),parent); }
         @Override public TtyConnector getTtyConnector() { return connector; }
-        @Override public String getTypedShellCommand() { return ""; }
+        @Override public String getTypedShellCommand() { return typedCommand; }
         @Override public boolean hasRunningCommands() {
             var application = ApplicationManager.getApplication();
             assertFalse("Process queries must never run on EDT",application.isDispatchThread());

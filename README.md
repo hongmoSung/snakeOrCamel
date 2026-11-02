@@ -52,30 +52,21 @@
 
 ## Supported IDEs
 
-Requires IntelliJ Platform **2024.2 or later** (build `242+`). Compatibility verification targets IntelliJ IDEA Community **2024.2** and unified IntelliJ IDEA **2026.2.4**.
-
-IntelliJ-based IDEs include:
-- IntelliJ IDEA
-- WebStorm
-- PyCharm
-- PhpStorm
-- Rider
-- And other JetBrains IDEs
+Requires **IntelliJ IDEA 2026.2.4 or later** (build `262.11879.100+`) with a Java 25 runtime. Compatibility verification targets **2026.2.4**; other IntelliJ-based IDEs and later versions require separate verification.
 
 ## Development
 
-Install **JDK 25** for Gradle and compilation, and **JDK 21** for runtime compatibility tests. Set `JAVA_HOME` to JDK 25. Gradle must be able to discover both installations.
+Install **JDK 25** and set `JAVA_HOME` to it. Gradle, compilation, and all tests use Java 25.
 
-The build uses Gradle **9.8.2** and IntelliJ Platform Gradle Plugin **2.19.0**. All Java compilation uses `--release 21`, restricting source syntax, standard APIs, and bytecode to Java 21. The compile platform remains IntelliJ IDEA Community 2024.2.
+The build uses the project wrapper (Gradle **9.8.2**) and IntelliJ Platform Gradle Plugin **2.19.0**. Compilation and the default sandbox use IntelliJ IDEA **2026.2.4**.
 
 ```bash
 ./gradlew --version
 ./gradlew clean build verifyPlugin
-./gradlew runIde          # IntelliJ IDEA Community 2024.2
-./gradlew runIde2026      # IntelliJ IDEA 2026.2.4, separate sandbox
+./gradlew runIde
 ```
 
-`build` runs the unit tests on JDK 25 (`test`) and JDK 21 (`testJava21`). Reports are in `build/reports/tests/`. Plugin Verifier checks both target IDEs using each IDE's bundled JBR; reports are in `build/reports/pluginVerifier/`. The distribution ZIP is in `build/distributions/`.
+`build` runs unit and platform fixture tests through `test`. Reports are in `build/reports/tests/`. Plugin Verifier checks 2026.2.4 using its bundled JBR; reports are in `build/reports/pluginVerifier/`. The distribution ZIP is in `build/distributions/`.
 
 See the [development and verification guide](./docs/development.md) for setup, bytecode inspection, and the sandbox smoke test checklist.
 

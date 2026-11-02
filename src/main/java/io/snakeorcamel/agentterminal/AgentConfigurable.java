@@ -19,6 +19,7 @@ public final class AgentConfigurable implements SearchableConfigurable {
     private JList<AgentProfile> profileList;
     private JComboBox<AgentProfile> defaultProfile;
     private JCheckBox enabled;
+    private JBLabel status;
     public AgentConfigurable(Project project) { this.project = project; }
     private JPanel panel;
     @Override public @NotNull String getId() { return "SnakeOrCamel.AgentTerminal"; }
@@ -28,17 +29,19 @@ public final class AgentConfigurable implements SearchableConfigurable {
         JPanel top = new JPanel(); top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
         enabled = new JCheckBox("Enable Agent Terminal integration (all projects)");
         top.add(new JLabel("<html><b>References always target the first visible Terminal tab.</b><br>"
-                + "A reference request may launch the default agent in an empty shell and wait up to 30 seconds.<br>"
-                + "References are inserted without Enter; existing questions are preserved.<br>"
+                + "An empty shell launches the default agent, then inserts your reference automatically.<br>"
+                + "References are inserted immediately without Enter, even while an agent is answering.<br>"
+                + "If another program is running in the first tab, it will receive the reference.<br>"
                 + "Enabling or opening a project never launches an agent.<br>"
                 + "Other plugins may separately share editor context automatically.<br>"
-                + "CLI screen changes may prevent readiness detection; uncertain input is held.</html>"));
+                + "After launch, insertion waits at least two seconds and confirms a running process (up to 30 seconds).<br>"
+                + "Existing shell commands are preserved. Startup confirmation does not detect login or permission prompts.</html>"));
         top.add(Box.createVerticalStrut(12)); top.add(enabled);
         for (String[] plugin : new String[][]{{"Terminal", "org.jetbrains.plugins.terminal"},
                 {"Claude Code", "com.anthropic.code.plugin"}, {"Codex CLI", "com.github.codexjb"}}) {
             top.add(new JLabel(plugin[0] + ": " + pluginStatus(plugin[1])));
         }
-        JBLabel status = new JBLabel(AgentKeymap.getInstance().status()).setAllowAutoWrapping(true).setCopyable(true);
+        status = new JBLabel(AgentKeymap.getInstance().status()).setAllowAutoWrapping(true).setCopyable(true);
         top.add(status);
         JButton keymap = new JButton("Open Keymap Settings…");
         keymap.addActionListener(e -> com.intellij.openapi.options.ShowSettingsUtil.getInstance().showSettingsDialog(null, "Keymap"));
@@ -125,18 +128,19 @@ public final class AgentConfigurable implements SearchableConfigurable {
         catch (IllegalArgumentException ex) { throw new ConfigurationException(ex.getMessage()); }
         AgentProfiles.getInstance(project).getState().profiles = new ArrayList<>(editedProfiles().stream().map(AgentProfile::copy).toList());
         AgentProfiles.getInstance(project).getState().defaultId = selectedDefault();
-        AgentSettings.getInstance().getState().enabled = enabled.isSelected();
-        AgentKeymap.getInstance().reconcile();
+        AgentKeymap.getInstance().applyEnabled(enabled.isSelected());
+        status.setText(AgentKeymap.getInstance().status());
     }
     @Override public void reset() {
         if (enabled == null) return;
         enabled.setSelected(AgentSettings.getInstance().isEnabled());
+        status.setText(AgentKeymap.getInstance().status());
         profiles.clear(); AgentProfiles.getInstance(project).profiles().forEach(profiles::addElement);
         refreshDefault(); defaultProfile.setSelectedItem(null);
         String id = AgentProfiles.getInstance(project).getState().defaultId;
         for (AgentProfile profile : editedProfiles()) if (profile.id.equals(id)) defaultProfile.setSelectedItem(profile);
     }
-    @Override public void disposeUIResources() { panel = null; enabled = null; profiles = null; profileList = null; defaultProfile = null; }
+    @Override public void disposeUIResources() { panel = null; status = null; enabled = null; profiles = null; profileList = null; defaultProfile = null; }
 
     public static final class Parent implements SearchableConfigurable {
         @Override public @NotNull String getId() { return "SnakeOrCamel"; }
