@@ -64,7 +64,7 @@
     <actions>
         <action
             id="Name.Convert"
-            class="io.snakeorcamel.EditorAction"
+            class="io.snakeorcamel.caseconvert.CaseConvertAction"
             text="Snake or Camel"
             description="Change to snake case or camel case"
         >
