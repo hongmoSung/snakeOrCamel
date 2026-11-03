@@ -45,9 +45,14 @@ final class ModernTerminalSession implements TerminalAccess.Session {
     }
     private record Probe(Object connection, TerminalAccess.ProcessStatus status, long sampledAt) {}
     private volatile Probe probe;
+    private Object connectionIdentity() {
+        // IDEA 2026.2.4 keeps this public Deferred for the lifetime of the view's shell session.
+        // Compare the handle without awaiting startup or accessing the internal session API.
+        return view.getStartupOptionsDeferred();
+    }
     @Override public TerminalAccess.Connection connection() {
         var state = view.getSessionState().getValue();
-        Object identity = view.getSessionDeferred();
+        Object identity = connectionIdentity();
         boolean connected = state instanceof TerminalViewSessionState.Running;
         Probe current = probe;
         var status = connected && current != null && current.connection == identity
@@ -62,7 +67,7 @@ final class ModernTerminalSession implements TerminalAccess.Session {
         }
         probe = null;
         try {
-            Object identity = view.getSessionDeferred();
+            Object identity = connectionIdentity();
             var result = new java.util.concurrent.CompletableFuture<Object>();
             Continuation<Boolean> callback = new Continuation<>() {
                 @Override public CoroutineContext getContext() { return EmptyCoroutineContext.INSTANCE; }
@@ -72,7 +77,7 @@ final class ModernTerminalSession implements TerminalAccess.Session {
             Object answer = immediate instanceof Boolean ? immediate
                     : result.get(2, java.util.concurrent.TimeUnit.SECONDS);
             ResultKt.throwOnFailure(answer);
-            if (view.getSessionDeferred() == identity && answer instanceof Boolean running) {
+            if (connectionIdentity() == identity && answer instanceof Boolean running) {
                 probe = new Probe(identity, running ? TerminalAccess.ProcessStatus.RUNNING : TerminalAccess.ProcessStatus.IDLE,
                         System.nanoTime());
             }
@@ -107,7 +112,7 @@ final class ModernTerminalSession implements TerminalAccess.Session {
         var integration = integration();
         boolean running = integration != null && integration.getOutputStatus().getValue() instanceof TerminalOutputStatus.ExecutingCommand;
         return new TerminalAccess.Screen(screen, line, prefix, below, true, idle, running,
-                view.getStartupOptionsDeferred());
+                connectionIdentity());
     }
     private TerminalShellIntegration integration() {
         var deferred = view.getShellIntegrationDeferred();

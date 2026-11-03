@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "io.snakeOrCamel"
-version = "1.2.0"
+version = "1.2.1"
 
 java {
     toolchain {
@@ -72,6 +72,10 @@ tasks {
     patchPluginXml {
         sinceBuild.set("262.11879.100")
         changeNotes.set("""
+            <h2>1.2.1</h2>
+            <ul>
+                <li>Replaced internal Reworked Terminal API usage with a public API for session identity tracking.</li>
+            </ul>
             <h2>1.2.0</h2>
             <ul>
                 <li>Requires IntelliJ IDEA 2026.2.4 or newer with Java 25.</li>
