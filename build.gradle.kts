@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "io.snakeOrCamel"
-version = "1.2.1"
+version = "1.2.2"
 
 java {
     toolchain {
@@ -60,6 +60,7 @@ intellijPlatform {
         ))
         ides {
             current()
+            create(IntelliJPlatformType.IntellijIdea, "263.7307.112")
         }
     }
 }
@@ -72,6 +73,11 @@ tasks {
     patchPluginXml {
         sinceBuild.set("262.11879.100")
         changeNotes.set("""
+            <h2>1.2.2</h2>
+            <ul>
+                <li>Replaced deprecated profile chooser dialogs and added compatibility verification for IDEA 2026.3 RC.</li>
+                <li>Fixed JSON formatting from Swing button events without an implicit write-intent lock.</li>
+            </ul>
             <h2>1.2.1</h2>
             <ul>
                 <li>Replaced internal Reworked Terminal API usage with a public API for session identity tracking.</li>

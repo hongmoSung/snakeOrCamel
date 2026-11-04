@@ -4,7 +4,7 @@ This file provides project context and working instructions for AI coding agents
 
 ## Project Overview
 
-snakeOrCamel is a JetBrains IntelliJ Platform plugin that provides text conversion utilities. It requires the platform and JSON modules declared in `plugin.xml`. Configured compatibility verification targets IntelliJ IDEA 2026.2.4; compatibility with other IntelliJ-based IDEs must be verified separately.
+snakeOrCamel is a JetBrains IntelliJ Platform plugin that provides text conversion utilities. It requires the platform and JSON modules declared in `plugin.xml`. Configured binary compatibility verification targets IntelliJ IDEA 2026.2.4 and 2026.3 RC (263.7307.112); compatibility with other IntelliJ-based IDEs must be verified separately.
 
 **Features:**
 - Convert text between snake_case/kebab-case and camelCase
@@ -15,13 +15,16 @@ snakeOrCamel is a JetBrains IntelliJ Platform plugin that provides text conversi
 Use JDK 25 as `JAVA_HOME`. Source, standard APIs, bytecode, and tests all target Java 25.
 
 ```bash
-# Build the plugin
+# Build and test the plugin (JAR)
 ./gradlew build
+
+# Create the installable ZIP in build/distributions
+./gradlew buildPlugin
 
 # Run plugin in IDE sandbox for testing
 ./gradlew runIde
 
-# Clean build, test on Java 25, and verify IntelliJ IDEA 2026.2.4
+# Clean build, test on Java 25, and verify IDEA 2026.2.4 and 2026.3 RC
 ./gradlew clean build verifyPlugin
 
 # Run utility and IntelliJ platform fixture tests
@@ -56,10 +59,12 @@ Plugin configuration: `src/main/resources/META-INF/plugin.xml`
 
 - Build, compilation, and tests: JDK 25 (class major version 69)
 - Gradle 9.8.2 with IntelliJ Platform Gradle Plugin 2.19.0
-- Compile, sandbox, and verification IDE: IntelliJ IDEA 2026.2.4 (sinceBuild 262.11879.100, no untilBuild)
+- Compile, sandbox, and fixture-test IDE: IntelliJ IDEA 2026.2.4 (sinceBuild 262.11879.100, no untilBuild); additional binary verification: IDEA 2026.3 RC (263.7307.112)
 - `test` includes utility and IntelliJ platform fixture tests; Plugin Verifier uses the IDE's bundled JBR
 - Gson for JSON processing
 
 Automated tests cover `ConvertUtil` and the registered case conversion action using IntelliJ editor fixtures, including multiple selections and grouped Undo/Redo. Changes to editor actions or the JSON tool window also need the sandbox smoke tests described in `docs/development.md`; automated test success alone does not verify those UI behaviors.
+
+Swing callbacks that access IntelliJ documents, PSI or folding models need a regression test through the actual button listener on EDT without implicit write intent. Disable the fixture's EDT/write-action wrappers for these tests and assert the incoming event is unlocked; a direct method call under the default fixture lock can hide threading bugs. Test asynchronous cancellation on disposal, unchanged input on errors, and Undo/Redo where documents are modified. `JsonPrettierPanelPlatformTest` demonstrates this pattern. Binary compatibility checks do not verify these runtime contracts.
 
 Use public IntelliJ IDEA 2026.2.4 APIs and Java 25. Keep Classic and Reworked terminal engines supported. See `docs/development.md` for setup and the manual verification checklist.

@@ -2,7 +2,6 @@ package io.snakeorcamel.agentterminal;
 
 import com.intellij.openapi.actionSystem.*;
 import com.intellij.openapi.project.DumbAwareAction;
-import com.intellij.openapi.ui.Messages;
 import org.jetbrains.annotations.NotNull;
 
 public final class AgentRunAction extends DumbAwareAction {
@@ -17,8 +16,7 @@ public final class AgentRunAction extends DumbAwareAction {
         var project = e.getProject(); if (project == null || !enabled(e)) return;
         var profiles = AgentProfiles.getInstance(project).profiles();
         if (profiles.isEmpty()) { AgentNotifications.show(project,"Add a launch profile in Agent Terminal settings.",null,null); return; }
-        int choice = Messages.showChooseDialog(project,"Choose a profile. Its own tab will be reused.","Run Agent",null,
-                profiles.stream().map(p -> p.name).toArray(String[]::new),profiles.getFirst().name);
-        if (choice >= 0) project.getService(AgentSessions.class).run(profiles.get(choice));
+        var choice = AgentProfileDialog.choose(project, profiles, "Run Agent", "Choose a profile. Its own tab will be reused.");
+        if (choice != null) project.getService(AgentSessions.class).run(choice);
     }
 }

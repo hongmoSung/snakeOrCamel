@@ -4,7 +4,6 @@ import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.*;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.ui.Messages;
 import com.intellij.util.Alarm;
 import java.nio.file.*;
 import java.util.*;
@@ -345,10 +344,9 @@ public final class AgentSessions implements Disposable {
     private AgentProfile chooseDefault() {
         List<AgentProfile> profiles = AgentProfiles.getInstance(project).profiles();
         if (profiles.isEmpty()) throw new IllegalArgumentException("Add a launch profile in Settings → Tools → SnakeOrCamel → Agent Terminal.");
-        int selected = Messages.showChooseDialog(project,"Select the default agent for an empty first terminal tab.","Agent Terminal",null,
-                profiles.stream().map(p -> p.name).toArray(String[]::new),profiles.getFirst().name);
-        if (selected < 0) return null;
-        AgentProfile profile = profiles.get(selected);
+        AgentProfile profile = AgentProfileDialog.choose(project, profiles, "Agent Terminal",
+                "Select the default agent for an empty first terminal tab.");
+        if (profile == null) return null;
         AgentProfiles.getInstance(project).getState().defaultId = profile.id;
         return profile;
     }

@@ -26,7 +26,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build & test
+      - name: Build, test & verify pinned IDE builds
         run: ./gradlew build verifyPlugin --stacktrace
 
       - name: Upload test results
@@ -34,7 +34,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-results
-          path: build/reports/tests/
+          path: |
+            build/reports/tests/
+            build/test-results/test/
 
       - name: Upload verifier report
         if: always()

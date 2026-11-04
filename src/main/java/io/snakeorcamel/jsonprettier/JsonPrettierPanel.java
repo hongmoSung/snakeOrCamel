@@ -4,6 +4,7 @@ import com.intellij.ide.highlighter.HighlighterFactory;
 import com.intellij.json.JsonFileType;
 import com.intellij.openapi.Disposable;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ModalityState;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.editor.Editor;
@@ -82,7 +83,7 @@ public class JsonPrettierPanel extends JPanel implements Disposable {
         JButton collapseAll = new JButton("Collapse All");
         JButton copy = new JButton("Copy");
 
-        format.addActionListener(e -> formatJson());
+        format.addActionListener(e -> scheduleEditorAction(this::formatJson));
         expandAll.addActionListener(e -> setAllFoldsExpanded(true));
         collapseAll.addActionListener(e -> setAllFoldsExpanded(false));
         copy.addActionListener(e -> copyToClipboard());
@@ -105,7 +106,6 @@ public class JsonPrettierPanel extends JPanel implements Disposable {
             String formatted = JsonUtil.prettify(input);
             WriteCommandAction.runWriteCommandAction(project,
                     () -> editor.getDocument().setText(formatted));
-
             PsiDocumentManager.getInstance(project).commitDocument(editor.getDocument());
             CodeFoldingManager.getInstance(project).updateFoldRegions(editor);
 
@@ -121,7 +121,7 @@ public class JsonPrettierPanel extends JPanel implements Disposable {
     }
 
     private void setAllFoldsExpanded(boolean expanded) {
-        ApplicationManager.getApplication().invokeLater(() -> {
+        scheduleEditorAction(() -> {
             FoldingModel folding = editor.getFoldingModel();
             folding.runBatchFoldingOperation(() -> {
                 for (FoldRegion region : folding.getAllFoldRegions()) {
@@ -129,6 +129,12 @@ public class JsonPrettierPanel extends JPanel implements Disposable {
                 }
             });
         });
+    }
+
+    private void scheduleEditorAction(Runnable action) {
+        // Plain Swing events do not guarantee write intent or a write-safe context.
+        ApplicationManager.getApplication().invokeLater(action,
+                ModalityState.stateForComponent(this), ignored -> project.isDisposed() || editor.isDisposed());
     }
 
     private void copyToClipboard() {
