@@ -3,47 +3,46 @@ package io.snakeorcamel.agentterminal;
 import com.intellij.openapi.project.Project;
 import com.intellij.ui.content.Content;
 import com.intellij.terminal.frontend.toolwindow.TerminalToolWindowTabsManager;
-import com.intellij.terminal.frontend.toolwindow.TerminalToolWindowTab;
 import com.intellij.terminal.frontend.view.TerminalView;
 import com.intellij.terminal.frontend.view.TerminalViewSessionState;
-import org.jetbrains.plugins.terminal.view.*;
-import org.jetbrains.plugins.terminal.view.shellIntegration.*;
-import kotlin.ResultKt;
+import org.jetbrains.annotations.NotNull;
 import kotlin.coroutines.Continuation;
 import kotlin.coroutines.CoroutineContext;
 import kotlin.coroutines.EmptyCoroutineContext;
 import java.nio.file.Path;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.*;
 
-/** Public Terminal APIs for the supported IntelliJ platform. */
+/** Public, experimental Reworked APIs. Launch only in a newly created tab; never inspect shell output. */
 final class ModernTerminalSession implements TerminalAccess.Session {
     private final TerminalView view;
     private final Content content;
     private final BooleanSupplier exists;
     private final Runnable focus;
-    private ModernTerminalSession(TerminalToolWindowTab tab, BooleanSupplier exists, Runnable focus) {
-        view = tab.getView(); content = tab.getContent();
+    ModernTerminalSession(TerminalView view, Content content, BooleanSupplier exists, Runnable focus) {
+        this.view = view; this.content = content;
         this.exists = exists; this.focus = focus;
     }
-    static TerminalAccess.Session find(Project project, Content content, BooleanSupplier exists, Runnable focus) {
-        for (var tab : TerminalToolWindowTabsManager.getInstance(project).getTabs()) {
-            if (tab.getContent() == content) return new ModernTerminalSession(tab, exists, focus);
-        }
-        return null;
-    }
-    static TerminalAccess.Session create(Project project, Path directory, String name, Predicate<Content> exists, Consumer<Content> focus) {
+    private static ModernTerminalSession create(Project project, Path directory, String name, Predicate<Content> exists, Consumer<Content> focus) {
         var tab = TerminalToolWindowTabsManager.getInstance(project).createTabBuilder()
                 .workingDirectory(directory.toString()).tabName(name).requestFocus(true)
                 .deferSessionStartUntilUiShown(false).createTab();
         Content content = tab.getContent();
-        return new ModernTerminalSession(tab, () -> exists.test(content), () -> focus.accept(content));
+        return new ModernTerminalSession(tab.getView(), content, () -> exists.test(content), () -> focus.accept(content));
+    }
+    static TerminalAccess.Session createForStartup(Project project, Path directory, String name, String command,
+                                                  Predicate<Content> exists, Consumer<Content> focus) {
+        var session = create(project, directory, name, exists, focus);
+        // Only a newly created tab may bypass empty-shell detection. The public input API
+        // buffers until the shell is connected, in order, before any user input can arrive.
+        // Powerlevel10k disables JetBrains shell integration, so waiting for it never finishes.
+        session.view.createSendTextBuilder().shouldExecute().send(command);
+        return session;
     }
     @Override public Object identity() { return view; }
     @Override public boolean exists() { return content.getManager() != null && exists.getAsBoolean(); }
-    @Override public boolean starting() {
-        return view.getSessionState().getValue() instanceof TerminalViewSessionState.NotStarted;
-    }
-    private record Probe(Object connection, TerminalAccess.ProcessStatus status, long sampledAt) {}
+    private record Probe(Object connection, TerminalAccess.ProcessStatus status, long sampledAt, long sequence) {}
+    private final java.util.concurrent.atomic.AtomicLong probeSequence = new java.util.concurrent.atomic.AtomicLong();
     private volatile Probe probe;
     private Object connectionIdentity() {
         // IDEA 2026.2.4 keeps this public Deferred for the lifetime of the view's shell session.
@@ -55,7 +54,7 @@ final class ModernTerminalSession implements TerminalAccess.Session {
         Object identity = connectionIdentity();
         boolean connected = state instanceof TerminalViewSessionState.Running;
         Probe current = probe;
-        var status = connected && current != null && current.connection == identity
+        var status = connected && current != null && current.sequence == probeSequence.get() && current.connection == identity
                 && System.nanoTime() - current.sampledAt <= java.util.concurrent.TimeUnit.SECONDS.toNanos(1)
                 ? current.status : TerminalAccess.ProcessStatus.UNKNOWN;
         return new TerminalAccess.Connection(identity, connected, status);
@@ -65,21 +64,26 @@ final class ModernTerminalSession implements TerminalAccess.Session {
         if (application.isDispatchThread() || application.isReadAccessAllowed()) {
             throw new IllegalStateException("Terminal process probes require a background thread without a read action.");
         }
+        long sequence = probeSequence.incrementAndGet();
         probe = null;
         try {
             Object identity = connectionIdentity();
-            var result = new java.util.concurrent.CompletableFuture<Object>();
+            CompletableFuture<Boolean> result = new CompletableFuture<>();
             Continuation<Boolean> callback = new Continuation<>() {
-                @Override public CoroutineContext getContext() { return EmptyCoroutineContext.INSTANCE; }
-                @Override public void resumeWith(Object answer) { result.complete(answer); }
+                @Override public @NotNull CoroutineContext getContext() { return EmptyCoroutineContext.INSTANCE; }
+                @Override public void resumeWith(@NotNull Object answer) {
+                    // A successful Boolean Result is unboxed. Any other value is a failed
+                    // query: do not inspect Kotlin's internal Result.Failure representation.
+                    if (answer instanceof Boolean running) result.complete(running);
+                    else result.completeExceptionally(new IllegalStateException("Terminal process query failed."));
+                }
             };
             Object immediate = view.hasChildProcesses(callback);
-            Object answer = immediate instanceof Boolean ? immediate
+            boolean running = immediate instanceof Boolean value ? value
                     : result.get(2, java.util.concurrent.TimeUnit.SECONDS);
-            ResultKt.throwOnFailure(answer);
-            if (connectionIdentity() == identity && answer instanceof Boolean running) {
+            if (probeSequence.get() == sequence && connectionIdentity() == identity) {
                 probe = new Probe(identity, running ? TerminalAccess.ProcessStatus.RUNNING : TerminalAccess.ProcessStatus.IDLE,
-                        System.nanoTime());
+                        System.nanoTime(), sequence);
             }
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
@@ -89,54 +93,15 @@ final class ModernTerminalSession implements TerminalAccess.Session {
         }
     }
     @Override public TerminalAccess.Screen screen() {
-        if (!(view.getSessionState().getValue() instanceof TerminalViewSessionState.Running)) return TerminalAccess.Screen.unknown();
-        var models = view.getOutputModels();
-        var active = models.getActive().getValue();
-        var snapshot = active.takeSnapshot();
-        var cursor = snapshot.getCursorOffset();
-        var cursorRow = snapshot.getLineByOffset(cursor);
-        var rowStart = snapshot.getStartOfLine(cursorRow);
-        var rowEnd = snapshot.getEndOfLine(cursorRow, false);
-        String line = snapshot.getText(rowStart, rowEnd).toString();
-        String prefix = snapshot.getText(rowStart, cursor).toString();
-        long first = snapshot.getFirstLineIndex().toAbsolute();
-        long last = snapshot.getLastLineIndex().toAbsolute();
-        var grid = view.getGridSize();
-        if (grid == null) return TerminalAccess.Screen.unknown();
-        var startLine = TerminalLineIndex.of(Math.max(first, last - grid.getRows() + 1));
-        var start = snapshot.getStartOfLine(startLine);
-        var end = snapshot.getEndOffset();
-        String screen = snapshot.getText(start, end).toString();
-        int below = (int) snapshot.getText(rowEnd, end).toString().lines().filter(s -> !s.isBlank()).count();
-        boolean idle = emptyShell(snapshot, end, active == models.getRegular());
-        var integration = integration();
-        boolean running = integration != null && integration.getOutputStatus().getValue() instanceof TerminalOutputStatus.ExecutingCommand;
-        return new TerminalAccess.Screen(screen, line, prefix, below, true, idle, running,
-                connectionIdentity());
-    }
-    private TerminalShellIntegration integration() {
-        var deferred = view.getShellIntegrationDeferred();
-        if (!deferred.isCompleted() || deferred.isCancelled()) return null;
-        return deferred.getCompleted();
-    }
-    private boolean emptyShell(TerminalOutputModelSnapshot snapshot, TerminalOffset end, boolean regular) {
-        if (!regular) return false;
-        var integration = integration();
-        if (integration == null || !(integration.getOutputStatus().getValue() instanceof TerminalOutputStatus.TypingCommand)) return false;
-        var block = integration.getBlocksModel().getActiveBlock();
-        if (!(block instanceof TerminalCommandBlock command)) return false;
-        var commandStart = command.getCommandStartOffset();
-        if (commandStart == null) return false;
-        long from = commandStart.toAbsolute();
-        if (from < snapshot.getStartOffset().toAbsolute() || from > end.toAbsolute()) return false;
-        return snapshot.getText(commandStart, end).toString().isBlank();
+        // Reworked queues startup atomically at creation. Existing/idle tabs are
+        // never launched into, so no output or shell-integration APIs are needed.
+        return TerminalAccess.Screen.unknown();
     }
     @Override public Path directory() {
         return view.getWorkingDirectoryFlow().getValue();
     }
     @Override public void execute(String command) {
-        if (!screen().emptyShell()) throw new IllegalStateException("The shell is not empty and ready. No command was sent.");
-        view.createSendTextBuilder().shouldExecute().send(command);
+        throw new IllegalStateException("Reworked commands may only be queued when creating a dedicated tab.");
     }
     @Override public void insert(String text) {
         if (AgentProfile.hasControl(text)) throw new IllegalArgumentException("Reference contains control characters.");

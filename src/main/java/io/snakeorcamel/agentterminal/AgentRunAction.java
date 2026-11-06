@@ -9,7 +9,7 @@ public final class AgentRunAction extends DumbAwareAction {
     @Override public void update(@NotNull AnActionEvent e) { e.getPresentation().setEnabled(e.getProject() != null); }
     static boolean enabled(AnActionEvent e) {
         if (AgentSettings.getInstance().isEnabled()) return true;
-        AgentNotifications.show(e.getProject(),"Agent Terminal is off. Read the first-tab and shortcut guidance in Settings → Tools → SnakeOrCamel → Agent Terminal to enable it.",null,null);
+        AgentNotifications.show(e.getProject(),"Agent Terminal is off. Read the dedicated-tab and shortcut guidance in Settings → Tools → SnakeOrCamel → Agent Terminal to enable it.",null,null);
         return false;
     }
     @Override public void actionPerformed(@NotNull AnActionEvent e) {

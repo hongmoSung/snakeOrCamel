@@ -103,6 +103,26 @@ public class ClassicTerminalSessionPlatformTest extends BasePlatformTestCase {
         }
     }
 
+    public void testLateProbeCannotOverwriteANewerObservationOnTheSameConnection() {
+        var widget = widget(); var session = session(widget);
+        var blocked = new java.util.concurrent.CountDownLatch(1);
+        widget.blockNextProbe = blocked;
+        var old = new CompletableFuture<Void>();
+        ApplicationManager.getApplication().executeOnPooledThread(() -> {
+            try { session.refreshProcessState(); old.complete(null); }
+            catch (Throwable ex) { old.completeExceptionally(ex); }
+        });
+        try {
+            PlatformTestUtil.waitWithEventsDispatching("old probe blocked", () -> widget.probes.get() == 1, 5);
+            widget.running = true; refresh(session);
+            assertEquals(TerminalAccess.ProcessStatus.RUNNING, session.connection().process());
+            blocked.countDown();
+            PlatformTestUtil.waitWithEventsDispatching("late old result", old::isDone, 5); old.join();
+            assertEquals(TerminalAccess.ProcessStatus.RUNNING, session.connection().process());
+            assertFalse(session.screen().emptyShell());
+        } finally { blocked.countDown(); }
+    }
+
     private ProbeWidget widget() {
         var widget = new ProbeWidget(getProject(),getTestRootDisposable());
         widget.getTerminal().writeCharacters("$ ");
@@ -129,6 +149,7 @@ public class ClassicTerminalSessionPlatformTest extends BasePlatformTestCase {
         volatile boolean running;
         String typedCommand = "";
         volatile boolean unsupported;
+        volatile java.util.concurrent.CountDownLatch blockNextProbe;
         final AtomicInteger probes = new AtomicInteger();
         ProbeWidget(Project project, Disposable parent) { super(project,new JBTerminalSystemSettingsProvider(),parent); }
         @Override public TtyConnector getTtyConnector() { return connector; }
@@ -137,9 +158,15 @@ public class ClassicTerminalSessionPlatformTest extends BasePlatformTestCase {
             var application = ApplicationManager.getApplication();
             assertFalse("Process queries must never run on EDT",application.isDispatchThread());
             assertFalse("Process queries must not hold read access",application.isReadAccessAllowed());
+            boolean observed = running;
+            var blocked = blockNextProbe; blockNextProbe = null;
             probes.incrementAndGet();
+            if (blocked != null) {
+                try { assertTrue(blocked.await(5, java.util.concurrent.TimeUnit.SECONDS)); }
+                catch (InterruptedException ex) { Thread.currentThread().interrupt(); throw new IllegalStateException(ex); }
+            }
             if (unsupported) throw new IllegalStateException("Unsupported connector");
-            return running;
+            return observed;
         }
     }
 

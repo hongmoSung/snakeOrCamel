@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "io.snakeOrCamel"
-version = "1.2.2"
+version = "1.2.4"
 
 java {
     toolchain {
@@ -65,6 +65,17 @@ intellijPlatform {
     }
 }
 
+// Exercise the actual installed IDE in an isolated sandbox without changing the compile SDK.
+providers.gradleProperty("localIdePath").orNull?.let { idePath ->
+    intellijPlatform.pluginVerification.ides.local(file(idePath))
+    intellijPlatformTesting.runIde.register("runLocalIde") {
+        localPath = file(idePath)
+        task {
+            jvmArgs("-Didea.log.debug.categories=#io.snakeorcamel.agentterminal.AgentSessions")
+        }
+    }
+}
+
 tasks {
     test {
         useJUnitPlatform()
@@ -73,6 +84,17 @@ tasks {
     patchPluginXml {
         sinceBuild.set("262.11879.100")
         changeNotes.set("""
+            <h2>1.2.4</h2>
+            <ul>
+                <li>Run Agent and file references share a dedicated project/profile terminal tab, regardless of tab order.</li>
+                <li>Coalesce startup and duplicate references; preserve exited tabs and create a fresh agent tab after confirmed exit.</li>
+                <li>Keep session ownership across tab moves and wait safely when process state is unknown.</li>
+            </ul>
+            <h2>1.2.3</h2>
+            <ul>
+                <li>Fixed first-terminal reference startup with Powerlevel10k or unavailable Reworked shell integration.</li>
+                <li>Queue the default agent once in a newly owned tab before showing Terminal; insert the reference without Enter after startup.</li>
+            </ul>
             <h2>1.2.2</h2>
             <ul>
                 <li>Replaced deprecated profile chooser dialogs and added compatibility verification for IDEA 2026.3 RC.</li>

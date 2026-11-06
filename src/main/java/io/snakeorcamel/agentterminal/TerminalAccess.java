@@ -31,8 +31,9 @@ public interface TerminalAccess {
     }
     /** Complete on EDT after the public ToolWindow show callback; caller owns cancellation. */
     void show(Runnable ready);
-    Session first();
-    Session create(Path directory, String name);
-    boolean isFirst(Session session);
-    AutoCloseable watchFirst(Session session, Runnable invalidated);
+    /** The command is either queued atomically in a fresh Reworked tab, or still awaits Classic shell readiness. */
+    record Startup(Session session, boolean commandQueued) {}
+    Startup createForStartup(Path directory, String name, String command);
+    /** Watches actual removal, allowing reordering and moves between Terminal split managers. */
+    AutoCloseable watch(Session session, Runnable invalidated);
 }

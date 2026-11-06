@@ -5,8 +5,8 @@ import com.intellij.openapi.wm.*;
 import com.intellij.ui.content.*;
 import org.jetbrains.plugins.terminal.TerminalToolWindowManager;
 import org.jetbrains.plugins.terminal.ShellTerminalWidget;
-import javax.swing.SwingUtilities;
-import java.awt.Point;
+import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.application.ModalityState;
 import java.nio.file.Path;
 import java.util.*;
 
@@ -28,59 +28,71 @@ public final class TerminalAdapter implements TerminalAccess {
     }
     private List<Content> contents() {
         var window = window();
-        var managers = new ArrayList<ContentManager>();
-        var root = window.getContentManager();
-        for (Content content : root.getContentsRecursively()) {
-            if (content.getManager() != null && !managers.contains(content.getManager())) managers.add(content.getManager());
-        }
-        // Content order inside a manager is the visible tab order. Across splits use the top-left group.
-        managers.sort(Comparator.<ContentManager>comparingInt(m -> position(m).y).thenComparingInt(m -> position(m).x));
-        return managers.stream().flatMap(m -> Arrays.stream(m.getContents())).toList();
-    }
-    private Point position(ContentManager manager) {
-        return SwingUtilities.convertPoint(manager.getComponent(), 0, 0, window().getComponent());
+        var root = window.getContentManagerIfCreated();
+        return root == null ? List.of() : List.copyOf(root.getContentsRecursively());
     }
     @Override public void show(Runnable ready) { window().show(ready); }
-    @Override public Session first() {
-        var contents = contents(); return contents.isEmpty() ? null : wrap(contents.getFirst());
+    private Session createClassic(Path directory, String name) {
+        var widget = TerminalToolWindowManager.getInstance(project).createShellWidget(directory.toString(), name, true, true);
+        var shell = ShellTerminalWidget.asShellJediTermWidget(widget);
+        if (shell != null) for (Content content : contents()) {
+            if (TerminalToolWindowManager.getWidgetByContent(content) == shell) {
+                return new ClassicTerminalSession(shell, content, () -> contents().contains(content), () -> focus(content));
+            }
+        }
+        throw new IllegalStateException("Could not identify the new terminal tab. No command was sent.");
     }
-    private Session wrap(Content content) {
-        Session modern = ModernTerminalSession.find(project, content, () -> contents().contains(content), () -> focus(content));
-        if (modern != null) return modern;
-        var widget = TerminalToolWindowManager.getWidgetByContent(content);
-        if (widget instanceof ShellTerminalWidget shell) return new ClassicTerminalSession(shell, content, () -> contents().contains(content), () -> focus(content));
-        throw new IllegalStateException("This terminal engine is not supported. Switch Settings → Tools → Terminal to Classic or Reworked.");
-    }
-    @Override public Session create(Path directory, String name) {
-        window().show();
+    @Override public Startup createForStartup(Path directory, String name, String command) {
         if (org.jetbrains.plugins.terminal.TerminalOptionsProvider.getInstance().getTerminalEngine()
                 == org.jetbrains.plugins.terminal.TerminalEngine.REWORKED) {
-            return ModernTerminalSession.create(project, directory, name, c -> contents().contains(c), this::focus);
+            return new Startup(ModernTerminalSession.createForStartup(project, directory, name, command,
+                    c -> contents().contains(c), this::focus), true);
         }
-        var widget = TerminalToolWindowManager.getInstance(project).createShellWidget(directory.toString(), name, true, true);
-        for (Content content : contents()) if (TerminalToolWindowManager.getWidgetByContent(content) == ShellTerminalWidget.asShellJediTermWidget(widget)) return wrap(content);
-        throw new IllegalStateException("Could not identify the new terminal tab. No command was sent.");
+        return new Startup(createClassic(directory, name), false);
     }
     private void focus(Content content) {
         if (content.getManager() == null) return;
         content.getManager().setSelectedContent(content);
-        window().activate(() -> content.getManager().requestFocus(content, true));
+        window().activate(() -> {
+            var manager = content.getManager();
+            if (manager != null) manager.requestFocus(content, true);
+        });
     }
-    @Override public boolean isFirst(Session session) {
-        Session first = first(); return first != null && first.identity() == session.identity();
-    }
-    @Override public AutoCloseable watchFirst(Session session, Runnable invalidated) {
-        Set<ContentManager> managers = new HashSet<>(); managers.add(window().getContentManager());
-        for (Content content : contents()) managers.add(content.getManager());
-        ContentManagerListener listener = new ContentManagerListener() {
-            private void check() {
-                try { if (!isFirst(session)) invalidated.run(); }
-                catch (RuntimeException ex) { invalidated.run(); }
+    @Override public AutoCloseable watch(Session session, Runnable invalidated) {
+        Set<ContentManager> managers = new HashSet<>();
+        class Watch implements ContentManagerListener, AutoCloseable {
+            boolean closed;
+            boolean scheduled;
+            void attach() {
+                var root = window().getContentManagerIfCreated();
+                if (root != null && managers.add(root)) root.addContentManagerListener(this);
+                for (Content content : contents()) {
+                    var manager = content.getManager();
+                    if (manager != null && managers.add(manager)) manager.addContentManagerListener(this);
+                }
             }
-            @Override public void contentRemoved(ContentManagerEvent e) { check(); }
-            @Override public void contentAdded(ContentManagerEvent e) { check(); }
-        };
-        managers.forEach(m -> m.addContentManagerListener(listener));
-        return () -> managers.forEach(m -> m.removeContentManagerListener(listener));
+            void checkLater() {
+                if (closed || scheduled) return;
+                scheduled = true;
+                ApplicationManager.getApplication().invokeLater(() -> {
+                    scheduled = false;
+                    if (closed) return;
+                    try {
+                        attach();
+                        if (session.exists()) return;
+                    } catch (RuntimeException ex) { /* Treat inaccessible content as removed. */ }
+                    close();
+                    invalidated.run();
+                }, ModalityState.nonModal());
+            }
+            @Override public void contentRemoved(ContentManagerEvent e) { checkLater(); }
+            @Override public void contentAdded(ContentManagerEvent e) { checkLater(); }
+            @Override public void close() {
+                closed = true;
+                managers.forEach(m -> m.removeContentManagerListener(this));
+                managers.clear();
+            }
+        }
+        Watch watch = new Watch(); watch.attach(); return watch;
     }
 }

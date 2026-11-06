@@ -78,7 +78,7 @@
             <action id="SnakeOrCamel.AgentTerminal.Run" class="io.snakeorcamel.agentterminal.AgentRunAction"
                     text="Run Agent…" description="Run a saved agent profile in its own Terminal tab"/>
             <action id="SnakeOrCamel.AgentTerminal.InsertReference" class="io.snakeorcamel.agentterminal.AgentInsertReferenceAction"
-                    text="Insert File Reference into First Terminal Tab" description="Insert the editor reference without Enter">
+                    text="Insert File Reference into Agent Terminal" description="Insert the editor reference without Enter">
                 <add-to-group group-id="EditorPopupMenu" anchor="last"/>
             </action>
         </group>

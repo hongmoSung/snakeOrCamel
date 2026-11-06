@@ -28,14 +28,16 @@ public final class AgentConfigurable implements SearchableConfigurable {
         panel = new JPanel(new BorderLayout(0, 12));
         JPanel top = new JPanel(); top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
         enabled = new JCheckBox("Enable Agent Terminal integration (all projects)");
-        top.add(new JLabel("<html><b>References always target the first visible Terminal tab.</b><br>"
-                + "An empty shell launches the default agent, then inserts your reference automatically.<br>"
-                + "References are inserted immediately without Enter, even while an agent is answering.<br>"
-                + "If another program is running in the first tab, it will receive the reference.<br>"
-                + "Enabling or opening a project never launches an agent.<br>"
+        top.add(new JLabel("<html><b>References target a dedicated tab for the default agent profile.</b><br>"
+                + "Run Agent and the reference shortcut share the same tab and startup.<br>"
+                + "Tab order, renaming and moves between Terminal splits preserve the target.<br>"
+                + "After an agent exits, a new dedicated tab is created; the old shell is preserved.<br>"
+                + "References preserve existing questions and are inserted without Enter.<br>"
+                + "Startup waits at least two seconds and confirms a running process (up to 30 seconds).<br>"
+                + "Unknown process state waits without sending input or launching another agent.<br>"
+                + "Enabling or opening a project never launches an agent. Restored tabs are not adopted.<br>"
                 + "Other plugins may separately share editor context automatically.<br>"
-                + "After launch, insertion waits at least two seconds and confirms a running process (up to 30 seconds).<br>"
-                + "Existing shell commands are preserved. Startup confirmation does not detect login or permission prompts.</html>"));
+                + "Startup confirmation does not detect login or permission prompts.</html>"));
         top.add(Box.createVerticalStrut(12)); top.add(enabled);
         for (String[] plugin : new String[][]{{"Terminal", "org.jetbrains.plugins.terminal"},
                 {"Claude Code", "com.anthropic.code.plugin"}, {"Codex CLI", "com.github.codexjb"}}) {

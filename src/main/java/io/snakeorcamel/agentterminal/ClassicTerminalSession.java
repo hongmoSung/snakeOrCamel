@@ -13,7 +13,8 @@ final class ClassicTerminalSession implements TerminalAccess.Session {
     private final Content content;
     private final BooleanSupplier exists;
     private final Runnable focus;
-    private record ProcessState(TtyConnector connector, boolean running, long sampledAt) {}
+    private record ProcessState(TtyConnector connector, boolean running, long sampledAt, long sequence) {}
+    private final java.util.concurrent.atomic.AtomicLong probeSequence = new java.util.concurrent.atomic.AtomicLong();
     private volatile ProcessState processState;
     ClassicTerminalSession(ShellTerminalWidget widget, Content content, BooleanSupplier exists, Runnable focus) {
         this.widget = widget; this.content = content; this.exists = exists; this.focus = focus;
@@ -25,13 +26,14 @@ final class ClassicTerminalSession implements TerminalAccess.Session {
         if (application.isDispatchThread() || application.isReadAccessAllowed()) {
             throw new IllegalStateException("Terminal process probes require a background thread without a read action.");
         }
+        long sequence = probeSequence.incrementAndGet();
         var connector = widget.getTtyConnector();
         processState = null;
         if (connector == null || !connector.isConnected()) return;
         try {
             boolean running = widget.hasRunningCommands();
-            if (widget.getTtyConnector() == connector && connector.isConnected()) {
-                processState = new ProcessState(connector,running,System.nanoTime());
+            if (probeSequence.get() == sequence && widget.getTtyConnector() == connector && connector.isConnected()) {
+                processState = new ProcessState(connector,running,System.nanoTime(),sequence);
             }
         } catch (RuntimeException | LinkageError ex) {
             AgentSessions.diagnostic(this, "probe", TerminalAccess.ProcessStatus.UNKNOWN, ex);
@@ -43,7 +45,7 @@ final class ClassicTerminalSession implements TerminalAccess.Session {
         var connector = widget.getTtyConnector();
         boolean connected = connector != null && connector.isConnected();
         ProcessState state = processState;
-        var status = connected && state != null && state.connector == connector
+        var status = connected && state != null && state.sequence == probeSequence.get() && state.connector == connector
                 && System.nanoTime() - state.sampledAt <= TimeUnit.SECONDS.toNanos(1)
                 ? (state.running ? TerminalAccess.ProcessStatus.RUNNING : TerminalAccess.ProcessStatus.IDLE)
                 : TerminalAccess.ProcessStatus.UNKNOWN;
@@ -62,7 +64,7 @@ final class ClassicTerminalSession implements TerminalAccess.Session {
             int column = Math.max(0, Math.min(line.length(), terminal.getCursorX()-1));
             // Process queries may block and are forbidden on EDT in newer Classic terminals.
             ProcessState state = processState;
-            boolean known = state != null && state.connector == connector
+            boolean known = state != null && state.sequence == probeSequence.get() && state.connector == connector
                     && System.nanoTime()-state.sampledAt <= TimeUnit.SECONDS.toNanos(1);
             boolean running = known && state.running;
             // Classic tracks shell input independently of the rendered prompt. Prompt themes,
