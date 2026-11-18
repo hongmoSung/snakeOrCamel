@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "io.snakeOrCamel"
-version = "1.2.4"
+version = "1.2.5"
 
 java {
     toolchain {
@@ -84,6 +84,11 @@ tasks {
     patchPluginXml {
         sinceBuild.set("262.11879.100")
         changeNotes.set("""
+            <h2>1.2.5</h2>
+            <ul>
+                <li>Share Agent Terminal launch commands and the default agent profile across projects in the same IDE.</li>
+                <li>Import existing project profiles the first time you use Agent Terminal in a configured project, if shared profiles have not been set up yet.</li>
+            </ul>
             <h2>1.2.4</h2>
             <ul>
                 <li>Run Agent and file references share a dedicated project/profile terminal tab, regardless of tab order.</li>

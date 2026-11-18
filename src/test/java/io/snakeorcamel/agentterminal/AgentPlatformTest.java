@@ -1,6 +1,7 @@
 package io.snakeorcamel.agentterminal;
 
 import com.intellij.openapi.command.WriteCommandAction;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.fileTypes.PlainTextFileType;
 import com.intellij.testFramework.fixtures.BasePlatformTestCase;
 import com.intellij.testFramework.ServiceContainerUtil;
@@ -11,6 +12,11 @@ import java.nio.file.*;
 import java.util.*;
 
 public class AgentPlatformTest extends BasePlatformTestCase {
+    @Override protected void setUp() throws Exception {
+        super.setUp();
+        ServiceContainerUtil.replaceService(ApplicationManager.getApplication(),
+                AgentProfiles.class, new AgentProfiles(), getTestRootDisposable());
+    }
     @Override protected void tearDown() throws Exception {
         try {
             getProject().getService(AgentSessions.class).cancelAll();
@@ -18,10 +24,28 @@ public class AgentPlatformTest extends BasePlatformTestCase {
             AgentKeymap.getInstance().reconcile();
         } finally { super.tearDown(); }
     }
-    public void testDefaultsAreOffAndProjectProfilesDoNotEnableIntegration() {
+    public void testDefaultsAreOffAndProfilesDoNotEnableIntegration() {
         assertFalse(new AgentSettings().isEnabled());
         assertEquals(2, new AgentProfiles().profiles().size());
         assertNull(new AgentProfiles().defaultProfile());
+    }
+    public void testLegacyDefaultAndCommandBecomeSharedOnce() {
+        var legacy = new LegacyAgentProfiles();
+        ServiceContainerUtil.replaceService(getProject(), LegacyAgentProfiles.class, legacy, getTestRootDisposable());
+        var shared = AgentProfiles.getInstance(getProject());
+        assertSame(AgentProfiles.getInstance(), shared);
+        assertFalse(shared.getState().configured);
+        var previous = new AgentProfiles.State();
+        var codex = previous.profiles.getLast();
+        codex.command = "codex --resume";
+        previous.defaultId = codex.id;
+        legacy.loadState(previous);
+        assertEquals("codex --resume", AgentProfiles.getInstance(getProject()).defaultProfile().command);
+        assertEquals(codex.id, shared.defaultProfile().id);
+        codex.command = "changed in legacy workspace";
+        assertEquals("codex --resume", shared.defaultProfile().command);
+        shared.saveProfiles(List.of(), "");
+        assertEmpty(AgentProfiles.getInstance(getProject()).profiles());
     }
     public void testSelectionEndingAtNextLineStartExcludesThatLine() {
         myFixture.configureByText(PlainTextFileType.INSTANCE, "one\ntwo\nthree\n");

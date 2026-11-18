@@ -7,7 +7,6 @@ import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.ui.components.JBLabel;
-import java.util.ArrayList;
 import java.util.List;
 import org.jetbrains.annotations.NotNull;
 import javax.swing.*;
@@ -18,6 +17,9 @@ public final class AgentConfigurable implements SearchableConfigurable {
     private DefaultListModel<AgentProfile> profiles;
     private JList<AgentProfile> profileList;
     private JComboBox<AgentProfile> defaultProfile;
+    private List<AgentProfile> initialProfiles;
+    private String initialDefault;
+    private boolean initialEnabled;
     private JCheckBox enabled;
     private JBLabel status;
     public AgentConfigurable(Project project) { this.project = project; }
@@ -64,7 +66,7 @@ public final class AgentConfigurable implements SearchableConfigurable {
     }
     private JComponent profilePanel() {
         JPanel area = new JPanel(new BorderLayout(8, 8));
-        area.setBorder(BorderFactory.createTitledBorder("Project-local launch profiles (not shared)"));
+        area.setBorder(BorderFactory.createTitledBorder("Launch profiles (all projects)"));
         profiles = new DefaultListModel<>(); profileList = new JList<>(profiles);
         area.add(new JScrollPane(profileList), BorderLayout.CENTER);
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -121,26 +123,29 @@ public final class AgentConfigurable implements SearchableConfigurable {
         }
     }
     @Override public boolean isModified() {
-        return enabled != null && (enabled.isSelected() != AgentSettings.getInstance().isEnabled()
-                || !editedProfiles().equals(AgentProfiles.getInstance(project).profiles())
-                || !selectedDefault().equals(AgentProfiles.getInstance(project).getState().defaultId));
+        return enabled != null && (enabled.isSelected() != initialEnabled || profilesModified());
+    }
+    private boolean profilesModified() {
+        return !editedProfiles().equals(initialProfiles) || !selectedDefault().equals(initialDefault);
     }
     @Override public void apply() throws ConfigurationException {
         try { for (AgentProfile profile : editedProfiles()) profile.validate(); }
         catch (IllegalArgumentException ex) { throw new ConfigurationException(ex.getMessage()); }
-        AgentProfiles.getInstance(project).getState().profiles = new ArrayList<>(editedProfiles().stream().map(AgentProfile::copy).toList());
-        AgentProfiles.getInstance(project).getState().defaultId = selectedDefault();
-        AgentKeymap.getInstance().applyEnabled(enabled.isSelected());
-        status.setText(AgentKeymap.getInstance().status());
+        if (profilesModified()) AgentProfiles.getInstance(project).saveProfiles(editedProfiles(), selectedDefault());
+        if (enabled.isSelected() != initialEnabled) AgentKeymap.getInstance().applyEnabled(enabled.isSelected());
+        reset();
     }
     @Override public void reset() {
         if (enabled == null) return;
-        enabled.setSelected(AgentSettings.getInstance().isEnabled());
+        initialEnabled = AgentSettings.getInstance().isEnabled();
+        enabled.setSelected(initialEnabled);
         status.setText(AgentKeymap.getInstance().status());
-        profiles.clear(); AgentProfiles.getInstance(project).profiles().forEach(profiles::addElement);
+        AgentProfiles shared = AgentProfiles.getInstance(project);
+        initialProfiles = shared.profiles();
+        initialDefault = shared.getState().defaultId;
+        profiles.clear(); initialProfiles.forEach(profiles::addElement);
         refreshDefault(); defaultProfile.setSelectedItem(null);
-        String id = AgentProfiles.getInstance(project).getState().defaultId;
-        for (AgentProfile profile : editedProfiles()) if (profile.id.equals(id)) defaultProfile.setSelectedItem(profile);
+        for (AgentProfile profile : editedProfiles()) if (profile.id.equals(initialDefault)) defaultProfile.setSelectedItem(profile);
     }
     @Override public void disposeUIResources() { panel = null; status = null; enabled = null; profiles = null; profileList = null; defaultProfile = null; }
 

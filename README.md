@@ -23,7 +23,7 @@
   - Perfect for batch operations
 
 - **Agent Terminal (opt-in)**:
-  - Save project-local Claude, Codex, or Custom launch profiles.
+  - Share Claude, Codex, or Custom launch profiles and the default agent across projects in the same IDE.
   - Insert file or selected-line references into the **dedicated default-agent Terminal tab**, preserving the question without pressing Enter.
   - Disabled by default. Enable under **Settings → Tools → SnakeOrCamel → Agent Terminal** after reviewing shortcut conflicts and behavior.
   - Use **Tools → SnakeOrCamel → Run Agent…** or the editor reference action. The reference shortcut is `⌥⌘K` on macOS / `Ctrl+Alt+K` on Windows and Linux when no existing assignment conflicts.

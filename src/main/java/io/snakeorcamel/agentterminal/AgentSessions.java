@@ -292,7 +292,8 @@ public final class AgentSessions implements Disposable {
         if (profiles.isEmpty()) throw new IllegalArgumentException("Add a launch profile in Settings → Tools → SnakeOrCamel → Agent Terminal.");
         AgentProfile profile = chooser.apply(profiles);
         if (profile == null) return null;
-        AgentProfiles.getInstance(project).getState().defaultId = profile.id;
+        AgentProfiles shared = AgentProfiles.getInstance(project);
+        shared.saveProfiles(shared.profiles(), profile.id);
         return profile;
     }
     private Path directory(AgentProfile profile) {

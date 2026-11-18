@@ -15,7 +15,7 @@
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/plugin-overview-page.html#plugin-description -->
     <description>
         <![CDATA[
-<b>Case Converter & JSON Prettier</b> - Convert text between naming conventions and format JSON instantly.
+Convert between naming conventions, format JSON, and add file or line references to prompts in your AI agent's terminal.
 
 <h3>Case Conversion</h3>
 <ul>
@@ -31,10 +31,15 @@
     <li>Copy formatted output with one click</li>
 </ul>
 
+<h3>AI Agent Terminal</h3>
+<p>Run Claude Code, Codex CLI, or a custom agent in a dedicated IDE terminal tab. Insert a reference to the current file or selected lines, such as <code>@src/App.java#L12-L18</code>, into the prompt you're writing. Press Enter when you're ready to send it.</p>
+
 <h3>Usage</h3>
 <ul>
     <li><b>Case Convert</b>: Select text → Right-click "Snake or Camel" or press <code>Ctrl+Cmd+C</code> (macOS) / <code>Ctrl+Alt+C</code> (Windows/Linux)</li>
     <li><b>JSON Prettier</b>: Open from the right tool window sidebar</li>
+    <li><b>Agent Terminal</b> is off by default. Enable it under <b>Settings → Tools → SnakeOrCamel → Agent Terminal</b> and choose a default profile for an installed CLI.</li>
+    <li>In the editor, right-click <b>Insert File Reference into Agent Terminal</b> or press <code>Option+Cmd+K</code> (macOS) or <code>Ctrl+Alt+K</code> (Windows/Linux) if the shortcut is available. The plugin opens or reuses the default agent's tab.</li>
 </ul>
 
 <h3>Use Cases</h3>
@@ -42,6 +47,7 @@
     <li>Convert between Java/JavaScript camelCase and Python snake_case</li>
     <li>Transform SQL column names to programming variables</li>
     <li>Format minified JSON for readability</li>
+    <li>Select a method and ask your agent to explain it using its file path and line range.</li>
 </ul>
         ]]>
     </description>
@@ -60,7 +66,8 @@
         <postStartupActivity implementation="io.snakeorcamel.agentterminal.AgentStartup"/>
         <applicationConfigurable parentId="tools" id="SnakeOrCamel" displayName="SnakeOrCamel"
                                  instance="io.snakeorcamel.agentterminal.AgentConfigurable$Parent"/>
-        <projectService serviceImplementation="io.snakeorcamel.agentterminal.AgentProfiles"/>
+        <applicationService serviceImplementation="io.snakeorcamel.agentterminal.AgentProfiles"/>
+        <projectService serviceImplementation="io.snakeorcamel.agentterminal.LegacyAgentProfiles"/>
         <projectService serviceImplementation="io.snakeorcamel.agentterminal.AgentSessions"/>
         <notificationGroup id="SnakeOrCamel Agent Terminal" displayType="BALLOON"/>
         <projectConfigurable parentId="SnakeOrCamel" id="SnakeOrCamel.AgentTerminal" displayName="Agent Terminal"
